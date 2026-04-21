@@ -19,6 +19,9 @@ func _calc_production() -> void:
 		var tile: HexTile = GameState.hex_tiles[coords]
 		if tile.building < 0:
 			continue
+		# Постройка работает только при наличии рабочих
+		if GameState.tile_workers.get(coords, 0) == 0:
+			continue
 
 		match tile.building:
 			GameState.BUILDING_PUMP:

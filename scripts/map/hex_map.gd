@@ -1,25 +1,60 @@
 class_name HexMap
-extends Node2D
+extends Node3D
 
-const HEX_SIZE:   float = 34.0
+const HEX_SIZE:   float = 1.10
 const MAP_RADIUS: int   = 5
+const MAX_WORKERS_PER_TILE: int = 10
 
 var tiles: Dictionary = {}           # Vector2i → HexTile
-var _hovered: Vector2i = Vector2i(-99, -99)
+var _hovered:       Vector2i = Vector2i(-99, -99)
+var _selected_tile: Vector2i = Vector2i(-99, -99)
+var _camera: Camera3D
+
+# ─── Индикаторы ──────────────────────────────────────────────────────────────
+var _radius_mi:   MeshInstance3D
+var _radius_mat:  StandardMaterial3D
+var _place_mi:    MeshInstance3D
+var _place_mat:   StandardMaterial3D
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	_add_ground_plane()
 	_generate_map()
-	EventBus.building_placed.connect(func(_t, _c): queue_redraw())
+	_setup_indicators()
+	call_deferred("_init_camera")
+	EventBus.building_placed.connect(func(_t, _c): _update_overlay())
+	EventBus.assign_workers_request.connect(_on_assign_workers)
+
+func _init_camera() -> void:
+	_camera = get_viewport().get_camera_3d()
+
+# ─── Тёмная подложка (заполняет зазоры между тайлами) ────────────────────────
+
+func _add_ground_plane() -> void:
+	var plane_mesh      = PlaneMesh.new()
+	plane_mesh.size     = Vector2(80.0, 80.0)
+	var mi              = MeshInstance3D.new()
+	mi.mesh             = plane_mesh
+	mi.position         = Vector3(0.0, -0.02, 0.0)
+	var mat             = StandardMaterial3D.new()
+	mat.albedo_color    = Color(0.06, 0.05, 0.03)
+	mat.roughness       = 1.0
+	mi.material_override = mat
+	add_child(mi)
+
+# ─── Генерация карты ──────────────────────────────────────────────────────────
 
 func _generate_map() -> void:
 	var rng = RandomNumberGenerator.new()
 	for coords: Vector2i in HexGrid.get_hex_in_range(Vector2i.ZERO, MAP_RADIUS):
-		var t = _pick_tile_type(coords, rng)
+		var t    = _pick_tile_type(coords, rng)
 		var tile = HexTile.new()
-		tile.position = HexGrid.hex_to_pixel(coords.x, coords.y, HEX_SIZE)
+		var px   = HexGrid.hex_to_pixel(coords.x, coords.y, HEX_SIZE)
+		tile.position = Vector3(px.x, 0.0, px.y)
 		tile.setup(coords.x, coords.y, HEX_SIZE, t)
 		add_child(tile)
-		tiles[coords]             = tile
+		tiles[coords]               = tile
 		GameState.hex_tiles[coords] = tile
 
 func _pick_tile_type(coords: Vector2i, rng: RandomNumberGenerator) -> int:
@@ -28,78 +63,194 @@ func _pick_tile_type(coords: Vector2i, rng: RandomNumberGenerator) -> int:
 	rng.seed = (coords.x + 200) * 397 + (coords.y + 200) * 131
 	var dist = HexGrid.hex_distance(coords, Vector2i.ZERO)
 	var roll = rng.randf()
-	if dist == 1 and roll < 0.45:
-		return HexTile.TILE_WATER_SOURCE
-	if dist == 2 and roll < 0.20:
-		return HexTile.TILE_WATER_SOURCE
-	if roll < 0.23:
-		return HexTile.TILE_ROCK
+	if dist == 1 and roll < 0.45: return HexTile.TILE_WATER_SOURCE
+	if dist == 2 and roll < 0.20: return HexTile.TILE_WATER_SOURCE
+	if roll < 0.23:               return HexTile.TILE_ROCK
+	# Природная шахта — на расстоянии 2+ тайлов
+	var roll2 = rng.randf()
+	if dist >= 2 and roll2 < 0.10: return HexTile.TILE_MINE
 	return HexTile.TILE_SAND
 
-# ─── Ввод ────────────────────────────────────────────────────────────────────
+# ─── Индикаторы ──────────────────────────────────────────────────────────────
 
-func _input(event: InputEvent) -> void:
-	if not event is InputEventMouseMotion:
+func _setup_indicators() -> void:
+	var ring_mesh                 = CylinderMesh.new()
+	ring_mesh.top_radius          = 1.0
+	ring_mesh.bottom_radius       = 1.0
+	ring_mesh.height              = 0.04
+	ring_mesh.radial_segments     = 52
+	ring_mesh.rings               = 1
+	_radius_mat                   = StandardMaterial3D.new()
+	_radius_mat.albedo_color      = Color(0.4, 0.9, 0.4, 0.55)
+	_radius_mat.transparency      = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_radius_mat.shading_mode      = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_radius_mi                    = MeshInstance3D.new()
+	_radius_mi.mesh               = ring_mesh
+	_radius_mi.material_override  = _radius_mat
+	_radius_mi.visible            = false
+	add_child(_radius_mi)
+
+	var disc_mesh                 = CylinderMesh.new()
+	disc_mesh.top_radius          = HEX_SIZE * 0.88
+	disc_mesh.bottom_radius       = HEX_SIZE * 0.88
+	disc_mesh.height              = 0.04
+	disc_mesh.radial_segments     = 6
+	_place_mat                    = StandardMaterial3D.new()
+	_place_mat.albedo_color       = Color(0, 1, 0, 0.28)
+	_place_mat.transparency       = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_place_mat.shading_mode       = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_place_mi                     = MeshInstance3D.new()
+	_place_mi.mesh                = disc_mesh
+	_place_mi.material_override   = _place_mat
+	_place_mi.visible             = false
+	add_child(_place_mi)
+
+# ─── Обновление ховера (каждый кадр) ─────────────────────────────────────────
+
+func _process(_delta: float) -> void:
+	if not _camera:
 		return
-	var local_pos = to_local(get_global_mouse_position())
-	var new_hov   = HexGrid.pixel_to_hex(local_pos, HEX_SIZE)
+	var new_hov = _hex_at_mouse()
 	if new_hov == _hovered:
 		return
+
 	if tiles.has(_hovered):
 		tiles[_hovered].set_hover(false)
+
 	_hovered = new_hov
-	if tiles.has(_hovered):
+
+	if tiles.has(_hovered) and GameState.selected_building_type < 0:
 		tiles[_hovered].set_hover(true)
-	queue_redraw()
+
+	_update_overlay()
+
+func _update_overlay() -> void:
+	if not tiles.has(_hovered):
+		_place_mi.visible  = false
+		_radius_mi.visible = false
+		return
+
+	var tile: HexTile = tiles[_hovered]
+	var px            = HexGrid.hex_to_pixel(_hovered.x, _hovered.y, HEX_SIZE)
+
+	if GameState.selected_building_type >= 0:
+		var ok = tile.can_build()
+		_place_mi.position       = Vector3(px.x, 0.04, px.y)
+		_place_mat.albedo_color  = (Color(0.0, 1.0, 0.28, 0.28)
+									if ok else Color(1.0, 0.14, 0.04, 0.28))
+		_place_mi.visible        = true
+		if ok:
+			_show_radius(_hovered,
+				_bld_radius(GameState.selected_building_type),
+				Color(0.32, 1.0, 0.32, 0.55))
+		else:
+			_radius_mi.visible = false
+	else:
+		_place_mi.visible = false
+		if tile.building >= 0:
+			_show_radius(_hovered, _bld_radius(tile.building),
+				Color(0.58, 0.80, 1.0, 0.55))
+		else:
+			_radius_mi.visible = false
+
+func _show_radius(center: Vector2i, r: int, color: Color) -> void:
+	if r <= 0:
+		_radius_mi.visible = false
+		return
+	var cp   = HexGrid.hex_to_pixel(center.x, center.y, HEX_SIZE)
+	var px_r = (float(r) + 0.50) * HEX_SIZE * 1.12
+	_radius_mi.position      = Vector3(cp.x, 0.04, cp.y)
+	_radius_mi.scale         = Vector3(px_r, 1.0, px_r)
+	_radius_mat.albedo_color = color
+	_radius_mi.visible       = true
+
+# ─── Ввод ────────────────────────────────────────────────────────────────────
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed):
 		return
-	var local_pos = to_local(get_global_mouse_position())
-	var hex       = HexGrid.pixel_to_hex(local_pos, HEX_SIZE)
-
 	if event.button_index == MOUSE_BUTTON_LEFT:
-		if tiles.has(hex):
-			_handle_click(hex)
+		if tiles.has(_hovered):
+			_handle_click(_hovered)
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		GameState.selected_building_type = -1
 		EventBus.building_type_selected.emit(-1)
-		queue_redraw()
+		_deselect_tile()
 
 func _handle_click(coords: Vector2i) -> void:
 	var tile: HexTile = tiles[coords]
-	if GameState.selected_building_type >= 0 and tile.can_build():
-		tile.place_building(GameState.selected_building_type)
-		EventBus.building_placed.emit(GameState.selected_building_type, coords)
-	queue_redraw()
-
-# ─── Отрисовка оверлея ───────────────────────────────────────────────────────
-
-func _draw() -> void:
-	if not tiles.has(_hovered):
-		return
-	var tile: HexTile = tiles[_hovered]
-	var pos = HexGrid.hex_to_pixel(_hovered.x, _hovered.y, HEX_SIZE)
 
 	if GameState.selected_building_type >= 0:
-		# Подсветка: можно / нельзя строить
-		var ok = tile.can_build()
-		draw_circle(pos, HEX_SIZE * 0.88,
-			Color(0.0, 1.0, 0.30, 0.22) if ok else Color(1.0, 0.20, 0.10, 0.22))
-		if ok:
-			_draw_radius(_hovered,
-				_bld_radius(GameState.selected_building_type),
-				Color(0.40, 1.0, 0.40, 0.55))
-	elif tile.building >= 0:
-		# Радиус эффекта существующей постройки
-		_draw_radius(_hovered, _bld_radius(tile.building),
-			Color(0.70, 0.88, 1.0, 0.55))
+		# ── Режим укладки ─────────────────────────────────────────────────────
+		if not tile.can_build():
+			return
+		if not GameState.can_afford(GameState.selected_building_type):
+			EventBus.game_event.emit({
+				"turn":        GameState.current_turn,
+				"title":       "Нет ресурсов",
+				"description": "Недостаточно ресурсов для постройки.",
+				"severity":    1,
+			})
+			return
+		GameState.spend_cost(GameState.selected_building_type)
+		tile.place_building(GameState.selected_building_type)
+		EventBus.building_placed.emit(GameState.selected_building_type, coords)
+		EventBus.resources_changed.emit(GameState.sand, GameState.scrap, GameState.diamonds)
+	else:
+		# ── Выбор тайла ───────────────────────────────────────────────────────
+		if _selected_tile == coords:
+			_deselect_tile()
+		else:
+			_select_tile(coords)
 
-func _draw_radius(center: Vector2i, radius: int, color: Color) -> void:
-	var cp  = HexGrid.hex_to_pixel(center.x, center.y, HEX_SIZE)
-	var pxr = (float(radius) + 0.50) * HEX_SIZE * 1.12
-	draw_arc(cp, pxr, 0.0, TAU, 48, color, 2.0)
-	draw_circle(cp, pxr, Color(color.r, color.g, color.b, 0.06))
+func _select_tile(coords: Vector2i) -> void:
+	if tiles.has(_selected_tile):
+		tiles[_selected_tile].set_selected(false)
+	_selected_tile = coords
+	tiles[_selected_tile].set_selected(true)
+	EventBus.tile_selected.emit(coords)
+
+func _deselect_tile() -> void:
+	if tiles.has(_selected_tile):
+		tiles[_selected_tile].set_selected(false)
+	_selected_tile = Vector2i(-99, -99)
+	EventBus.tile_selected.emit(Vector2i(-99, -99))
+
+# ─── Назначение рабочих ──────────────────────────────────────────────────────
+
+func _on_assign_workers(coords: Vector2i, delta: int) -> void:
+	var tile: HexTile = tiles.get(coords)
+	if not tile:
+		return
+	var current:   int = GameState.tile_workers.get(coords, 0)
+	var new_count: int
+	if delta > 0:
+		var can_add = mini(delta, GameState.get_available_workers())
+		new_count   = mini(current + can_add, MAX_WORKERS_PER_TILE)
+	else:
+		new_count = maxi(0, current + delta)
+	if new_count == current:
+		return
+	GameState.tile_workers[coords] = new_count
+	tile.update_workers(new_count)
+	EventBus.workers_changed.emit(coords, new_count)
+
+# ─── Raycast: мышь → гекс ────────────────────────────────────────────────────
+
+func _hex_at_mouse() -> Vector2i:
+	if not _camera:
+		return Vector2i(-99, -99)
+	var mouse    = get_viewport().get_mouse_position()
+	var ray_from = _camera.project_ray_origin(mouse)
+	var ray_dir  = _camera.project_ray_normal(mouse)
+	if absf(ray_dir.y) < 0.0005:
+		return Vector2i(-99, -99)
+	var t   = -ray_from.y / ray_dir.y
+	var hit = ray_from + ray_dir * t
+	var loc = to_local(hit)
+	return HexGrid.pixel_to_hex(Vector2(loc.x, loc.z), HEX_SIZE)
+
+# ─── Радиусы построек ────────────────────────────────────────────────────────
 
 static func _bld_radius(b: int) -> int:
 	match b:
@@ -107,4 +258,5 @@ static func _bld_radius(b: int) -> int:
 		GameState.BUILDING_PURIFIER:        return 2
 		GameState.BUILDING_CONDENSER:       return 1
 		GameState.BUILDING_CARAVAN_STATION: return 4
-		_:                                  return 2
+		GameState.BUILDING_MINE:            return 0
+		_:                                  return 0
