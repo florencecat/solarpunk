@@ -5,12 +5,25 @@ var _camera:  Camera3D
 var _sun:     DirectionalLight3D
 var _env_res: Environment
 
-# ─── Вращение камеры ──────────────────────────────────────────────────────────
-const CAM_HEIGHT: float = 20.0
-const CAM_DIST:   float = 14.0
-const CAM_SPEED:  float = 1.5    # рад/сек
+# ─── Камера ───────────────────────────────────────────────────────────────────
+# Сферические координаты: yaw = горизонтальный угол, pitch = вертикальный угол
+# position = target + (sin(yaw)*cos(pitch), sin(pitch), cos(yaw)*cos(pitch)) * CAM_DIST
 
-var _cam_yaw: float = 0.0
+const CAM_DIST:      float = 24.0   # расстояние от цели до камеры
+const CAM_YAW_SPEED: float = 1.5    # рад/сек (клавиши Q/E)
+const CAM_MOUSE_SPEED: float = 0.004 # рад/пиксель (RMB-вращение)
+const CAM_PAN_SENSITIVITY: float = 2.0
+const CAM_TARGET_LIMIT: float = 14.0
+
+var _cam_yaw:    float   = 0.0
+var _cam_pitch:  float   = 0.96   # ~55° (сохраняет исходный ракурс)
+var _cam_target: Vector3 = Vector3.ZERO
+
+var _drag_lmb:  bool    = false   # ЛКМ-пан активен
+var _drag_rmb:  bool    = false   # ПКМ-орбита активна
+var _last_mouse: Vector2 = Vector2.ZERO
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
 	_create_world()
@@ -55,23 +68,53 @@ func _create_world() -> void:
 	add_child(_camera)
 	_update_camera_position()
 
-# ─── Вращение камеры ─────────────────────────────────────────────────────────
+# ─── Позиция и вращение камеры ───────────────────────────────────────────────
 
 func _update_camera_position() -> void:
-	_camera.position = Vector3(
-		sin(_cam_yaw) * CAM_DIST,
-		CAM_HEIGHT,
-		cos(_cam_yaw) * CAM_DIST
+	_cam_pitch = clampf(_cam_pitch, 0.32, PI * 0.48)
+	_camera.position = _cam_target + Vector3(
+		sin(_cam_yaw) * cos(_cam_pitch) * CAM_DIST,
+		sin(_cam_pitch) * CAM_DIST,
+		cos(_cam_yaw) * cos(_cam_pitch) * CAM_DIST
 	)
-	_camera.look_at(Vector3.ZERO)
+	_camera.look_at(_cam_target)
 
 func _process(delta: float) -> void:
+	# Q/E — горизонтальное вращение клавишами
 	var rot := 0.0
 	if Input.is_key_pressed(KEY_Q): rot -= 1.0
 	if Input.is_key_pressed(KEY_E): rot += 1.0
 	if rot != 0.0:
-		_cam_yaw += rot * CAM_SPEED * delta
+		_cam_yaw += rot * CAM_YAW_SPEED * delta
 		_update_camera_position()
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		match event.button_index:
+			MOUSE_BUTTON_RIGHT:
+				if event.pressed:
+					_drag_rmb   = true
+					_last_mouse = event.position
+					# Не блокируем событие — hex_map снимет выделение тайла
+				else:
+					_drag_rmb = false
+
+			MOUSE_BUTTON_WHEEL_UP:
+				_camera.size = maxf(7.0, _camera.size - 0.9)
+			MOUSE_BUTTON_WHEEL_DOWN:
+				_camera.size = minf(28.0, _camera.size + 0.9)
+
+	elif event is InputEventMouseMotion:
+		if _drag_rmb:
+			_orbit_camera(event.relative)
+			get_viewport().set_input_as_handled()
+
+# ─── Орбита (ПКМ перетаскивание) ─────────────────────────────────────────────
+
+func _orbit_camera(delta: Vector2) -> void:
+	_cam_yaw   += delta.x * CAM_MOUSE_SPEED
+	_cam_pitch -= delta.y * CAM_MOUSE_SPEED   # вверх = pitch растёт
+	_update_camera_position()
 
 # ─── Менеджеры ───────────────────────────────────────────────────────────────
 
@@ -143,30 +186,29 @@ func _create_ui() -> void:
 	laws.name = "LawsPanel"
 	laws.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
 	laws.offset_left   =   8.0
-	laws.offset_top    = -185.0
-	laws.offset_right  =  235.0
-	laws.offset_bottom =  185.0
+	laws.offset_top    = -240.0
+	laws.offset_right  =  245.0
+	laws.offset_bottom =  240.0
 	ui.add_child(laws)
 	laws.call_deferred("setup", get_meta("laws_manager"))
 
 	var tip = load("res://scripts/ui/tile_info_panel.gd").new()
 	tip.name = "TileInfoPanel"
 	tip.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	tip.offset_left   = -220.0
-	tip.offset_top    = -165.0
-	tip.offset_right  =  220.0
+	tip.offset_left   = -240.0
+	tip.offset_top    = -185.0
+	tip.offset_right  =  240.0
 	tip.offset_bottom =   -8.0
 	ui.add_child(tip)
 
-# ─── Ввод: зум колёсиком ─────────────────────────────────────────────────────
-
-func _input(event: InputEvent) -> void:
-	if not event is InputEventMouseButton or not event.pressed:
-		return
-	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-		_camera.size = maxf(7.0, _camera.size - 0.9)
-	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		_camera.size = minf(28.0, _camera.size + 0.9)
+	# Модальный оверлей поверх всего — отдельный слой
+	var modal_layer      = CanvasLayer.new()
+	modal_layer.layer    = 20
+	modal_layer.name     = "ModalLayer"
+	add_child(modal_layer)
+	var modal = load("res://scripts/ui/modal_overlay.gd").new()
+	modal.name = "ModalOverlay"
+	modal_layer.add_child(modal)
 
 # ─── Эффект песчаной бури ────────────────────────────────────────────────────
 

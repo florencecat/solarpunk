@@ -41,4 +41,11 @@ signal tile_selected(coords: Vector2i)              # Vector2i(-99,-99) = сня
 @warning_ignore("unused_signal")
 signal workers_changed(coords: Vector2i, count: int)
 @warning_ignore("unused_signal")
-signal assign_workers_request(coords: Vector2i, delta: int)
+signal assign_workers_request(coords: Vector2i, target: int)
+
+@warning_ignore("unused_signal")
+signal game_over(reason: String, score: int)
+@warning_ignore("unused_signal")
+signal choice_event_pending(event: Dictionary)  # {title, desc, choice_a, choice_b}
+@warning_ignore("unused_signal")
+signal choice_resolved(choice: int)             # 0 = A (первый), 1 = B (второй)

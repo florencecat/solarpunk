@@ -1,15 +1,18 @@
 extends Control
 
-const MAX_WORKERS: int = 10
+# Максимальное число «слотов» в ряду чекбоксов
+const CHECKBOX_MAX: int = 7
 
-var _title_lbl:  Label
-var _bld_lbl:    Label
-var _worker_lbl: Label
-var _minus_btn:  Button
-var _plus_btn:   Button
-var _avail_lbl:  Label
-var _prod_lbl:   Label
-var _risk_lbl:   Label
+var _title_lbl:    Label
+var _bld_lbl:      Label
+var _worker_boxes: Array = []      # Array[Button]
+var _box_row:      HBoxContainer
+var _avail_lbl:    Label
+var _prod_lbl:     Label
+var _risk_lbl:     Label
+var _dur_lbl:      Label
+var _repair_btn:   Button
+var _reserves_lbl: Label
 
 var _coords: Vector2i = Vector2i(-99, -99)
 var _valid:  bool     = false
@@ -23,6 +26,7 @@ func _ready() -> void:
 	EventBus.workers_changed.connect(func(c, _n): if c == _coords: _refresh())
 	EventBus.population_changed.connect(func(_n): _refresh())
 	EventBus.resources_changed.connect(func(_s, _sc, _d): _refresh())
+	EventBus.building_placed.connect(func(_t, c): if c == _coords: _refresh())
 
 # ─── Построение UI ───────────────────────────────────────────────────────────
 
@@ -56,33 +60,26 @@ func _build_ui() -> void:
 
 	vbox.add_child(HSeparator.new())
 
-	# ── Строка рабочих ────────────────────────────────────────────────────────
-	var wrow = HBoxContainer.new()
-	wrow.add_theme_constant_override("separation", 6)
-	vbox.add_child(wrow)
+	# ── Рабочие ──────────────────────────────────────────────────────────────
+	var wlabel = _lbl("Рабочие:", 12, Color(0.80, 0.80, 0.80))
+	vbox.add_child(wlabel)
 
-	var wlbl = _lbl("Рабочие:", 13)
-	wrow.add_child(wlbl)
+	# Ряд чекбоксов
+	_box_row = HBoxContainer.new()
+	_box_row.add_theme_constant_override("separation", 4)
+	vbox.add_child(_box_row)
 
-	_minus_btn = Button.new()
-	_minus_btn.text = "−"
-	_minus_btn.custom_minimum_size = Vector2(30, 28)
-	_minus_btn.pressed.connect(func(): _request(-1))
-	wrow.add_child(_minus_btn)
-
-	_worker_lbl = _lbl("0", 16, Color(1.0, 0.90, 0.45))
-	_worker_lbl.custom_minimum_size       = Vector2(28, 0)
-	_worker_lbl.horizontal_alignment      = HORIZONTAL_ALIGNMENT_CENTER
-	wrow.add_child(_worker_lbl)
-
-	_plus_btn = Button.new()
-	_plus_btn.text = "+"
-	_plus_btn.custom_minimum_size = Vector2(30, 28)
-	_plus_btn.pressed.connect(func(): _request(1))
-	wrow.add_child(_plus_btn)
+	for i in range(CHECKBOX_MAX):
+		var b = Button.new()
+		b.custom_minimum_size = Vector2(28, 28)
+		b.clip_text           = false
+		var idx = i  # захват переменной в лямбде
+		b.pressed.connect(func(): _on_box_pressed(idx))
+		_worker_boxes.append(b)
+		_box_row.add_child(b)
 
 	_avail_lbl = _lbl("", 11, Color(0.50, 0.50, 0.50))
-	wrow.add_child(_avail_lbl)
+	vbox.add_child(_avail_lbl)
 
 	# Производительность
 	_prod_lbl = _lbl("", 11, Color(0.42, 0.90, 0.58))
@@ -91,6 +88,22 @@ func _build_ui() -> void:
 	# Риск
 	_risk_lbl = _lbl("", 11, Color(1.0, 0.35, 0.20))
 	vbox.add_child(_risk_lbl)
+
+	# Прочность
+	_dur_lbl = _lbl("", 11)
+	vbox.add_child(_dur_lbl)
+
+	# Кнопка ремонта
+	_repair_btn = Button.new()
+	_repair_btn.text = "Починить (−3 лома)"
+	_repair_btn.custom_minimum_size = Vector2(0, 28)
+	_repair_btn.visible = false
+	_repair_btn.pressed.connect(_on_repair_pressed)
+	vbox.add_child(_repair_btn)
+
+	# Запасы подземных вод
+	_reserves_lbl = _lbl("", 11, Color(0.55, 0.80, 1.0))
+	vbox.add_child(_reserves_lbl)
 
 # ─── Сигналы / логика ────────────────────────────────────────────────────────
 
@@ -117,29 +130,79 @@ func _refresh() -> void:
 
 	var workers: int = GameState.tile_workers.get(_coords, 0)
 	var avail:   int = GameState.get_available_workers()
-	var can_add      = (avail > 0 and workers < MAX_WORKERS
-						and _can_assign(tile))
-	var can_remove   = (workers > 0)
+	var max_w:   int = tile.get_max_workers()
 
-	_worker_lbl.text     = str(workers)
-	_avail_lbl.text      = "(св: %d)" % avail
-	_minus_btn.disabled  = not can_remove
-	_plus_btn.disabled   = not can_add
+	# ── Чекбоксы рабочих ─────────────────────────────────────────────────────
+	for i in range(CHECKBOX_MAX):
+		var box: Button = _worker_boxes[i]
+		if i < max_w:
+			box.visible = true
+			box.text    = "●" if i < workers else "○"
+			# Зелёный = занят, серый = свободный
+			box.add_theme_color_override(
+				"font_color",
+				Color(0.30, 0.90, 0.45) if i < workers else Color(0.45, 0.45, 0.45)
+			)
+			# Заблокировать пустой слот, если нет свободных рабочих
+			var can_fill = (avail > 0 or i < workers)
+			box.disabled = (not can_fill) and (i >= workers)
+		else:
+			box.visible  = false
+			box.disabled = true
 
-	_prod_lbl.text  = _prod_text(tile, workers)
-	_risk_lbl.text  = _risk_text(tile)
+	_avail_lbl.text = "(свободно: %d)" % avail
+
+	_prod_lbl.text    = _prod_text(tile, workers)
+	_risk_lbl.text    = _risk_text(tile)
 	_risk_lbl.visible = _risk_lbl.text != ""
 
-func _can_assign(tile: HexTile) -> bool:
-	match tile.tile_type:
-		HexTile.TILE_OASIS, HexTile.TILE_ROCK:
-			return false
-	return true
+	# ── Прочность ─────────────────────────────────────────────────────────────
+	if tile.building >= 0 and GameState.building_durability.has(_coords):
+		var dur: float = GameState.building_durability[_coords]
+		_dur_lbl.text   = "Прочность: %d%%" % int(dur)
+		if dur >= 70.0:
+			_dur_lbl.add_theme_color_override("font_color", Color(0.35, 0.90, 0.45))
+		elif dur >= 35.0:
+			_dur_lbl.add_theme_color_override("font_color", Color(1.0, 0.80, 0.20))
+		else:
+			_dur_lbl.add_theme_color_override("font_color", Color(1.0, 0.25, 0.15))
+		_dur_lbl.visible    = true
+		_repair_btn.visible = dur < 100.0
+		_repair_btn.disabled = GameState.scrap < 3.0
+	else:
+		_dur_lbl.visible    = false
+		_repair_btn.visible = false
 
-func _request(delta: int) -> void:
+	# ── Подземные запасы воды ─────────────────────────────────────────────────
+	if tile.tile_type == HexTile.TILE_WATER_SOURCE and GameState.tile_water_reserves.has(_coords):
+		var res: float = GameState.tile_water_reserves[_coords]
+		_reserves_lbl.text    = "Запасы: %.0f ед." % res
+		_reserves_lbl.visible = true
+	else:
+		_reserves_lbl.visible = false
+
+# ─── Обработчики ─────────────────────────────────────────────────────────────
+
+func _on_box_pressed(idx: int) -> void:
 	if not _valid:
 		return
-	EventBus.assign_workers_request.emit(_coords, delta)
+	var current = GameState.tile_workers.get(_coords, 0)
+	var target: int
+	if idx < current:
+		# Клик по занятому слоту → снять этот и все выше
+		target = idx
+	else:
+		# Клик по пустому слоту → заполнить до этого включительно
+		target = idx + 1
+	EventBus.assign_workers_request.emit(_coords, target)
+
+func _on_repair_pressed() -> void:
+	if not _valid or GameState.scrap < 3.0:
+		return
+	GameState.scrap = maxf(0.0, GameState.scrap - 3.0)
+	GameState.building_durability[_coords] = 100.0
+	EventBus.resources_changed.emit(GameState.sand, GameState.scrap, GameState.diamonds)
+	_refresh()
 
 # ─── Текстовые помощники ─────────────────────────────────────────────────────
 
@@ -172,7 +235,10 @@ func _prod_text(tile: HexTile, workers: int) -> String:
 			workers, workers * 4,
 			workers * 0.5, workers * 2.0]
 	if tile.building >= 0:
-		return "Постройка активна"
+		var dur_pct := ""
+		if GameState.building_durability.has(_coords):
+			dur_pct = "  (eff %.0f%%)" % GameState.building_durability[_coords]
+		return "Постройка активна%s" % dur_pct
 	return "+%d–%d пес / день" % [workers, workers * 4]
 
 func _risk_text(tile: HexTile) -> String:

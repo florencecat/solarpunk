@@ -13,6 +13,13 @@ func process_turn() -> void:
 func _mine_resources() -> void:
 	var resources_changed := false
 
+	# Множитель выработки от законов
+	var output_mult: float = 1.0
+	if GameState.active_laws.get(LawsManager.LAW_HARSH_REGIME, false):
+		output_mult *= 1.25
+	if GameState.active_laws.get(LawsManager.LAW_WATER_RATIONING, false):
+		output_mult *= 0.85
+
 	for coords: Vector2i in GameState.tile_workers:
 		var count: int = GameState.tile_workers[coords]
 		if count <= 0:
@@ -22,14 +29,14 @@ func _mine_resources() -> void:
 			continue
 
 		if _is_mine(tile):
-			_process_mine(coords, tile, count)
+			_process_mine(coords, tile, count, output_mult)
 			resources_changed = true
 		elif tile.building < 0:
 			# Открытая добыча песчаника — безопасно
 			var gain := 0.0
 			for _i in range(count):
 				gain += _rng.randf_range(1.0, 4.0)
-			GameState.sand += gain
+			GameState.sand += gain * output_mult
 			resources_changed = true
 
 	if resources_changed:
@@ -40,13 +47,13 @@ func _mine_resources() -> void:
 func _is_mine(tile: HexTile) -> bool:
 	return tile.tile_type == HexTile.TILE_MINE or tile.building == GameState.BUILDING_MINE
 
-func _process_mine(coords: Vector2i, tile: HexTile, count: int) -> void:
+func _process_mine(coords: Vector2i, tile: HexTile, count: int, output_mult: float = 1.0) -> void:
 	var deaths := 0
 
 	for _i in range(count):
 		# Базовая добыча: металлолом + немного песчаника
-		GameState.scrap += _rng.randf_range(1.0, 4.0)
-		GameState.sand  += _rng.randf_range(0.5, 2.0)
+		GameState.scrap += _rng.randf_range(1.0, 4.0) * output_mult
+		GameState.sand  += _rng.randf_range(0.5, 2.0) * output_mult
 
 		# Шанс гибели при обычной добыче (1%)
 		if _rng.randf() < 0.01:

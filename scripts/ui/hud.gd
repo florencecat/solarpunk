@@ -4,11 +4,13 @@ var _turn_lbl:       Label
 var _auto_btn:       Button
 var _water_lbl:      Label
 var _water_bar:      ProgressBar
+var _reserves_lbl:   Label
 var _pop_lbl:        Label
 var _thirst_bar:     ProgressBar
 var _discontent_bar: ProgressBar
 var _res_lbl:        Label
 var _workers_lbl:    Label
+var _turn_score_lbl: Label
 var _riot_panel:     Control
 var _storm_lbl:      Label
 var _surv_panel:     Control
@@ -39,6 +41,8 @@ func _build_ui() -> void:
 	tp.add_child(tv)
 	_turn_lbl = _lbl("День 0", 18, Color(0.95, 0.76, 0.32))
 	tv.add_child(_turn_lbl)
+	_turn_score_lbl = _lbl("Очки: —", 11, Color(0.70, 0.70, 0.70))
+	tv.add_child(_turn_score_lbl)
 	_auto_btn = Button.new()
 	_auto_btn.text = "▶  Авто: ВЫКЛ"
 	_auto_btn.pressed.connect(_toggle_auto)
@@ -60,6 +64,8 @@ func _build_ui() -> void:
 	_water_bar = _bar(Color(0.15, 0.55, 0.95), 155.0)
 	_water_bar.max_value = 500.0
 	wv.add_child(_water_bar)
+	_reserves_lbl = _lbl("Подземн.: —", 11, Color(0.55, 0.75, 0.95))
+	wv.add_child(_reserves_lbl)
 
 	# ── Панель населения ─────────────────────────────────────────────────────
 	var pp = _panel(Color(0.18, 0.10, 0.05, 0.94))
@@ -150,8 +156,10 @@ func _connect_signals() -> void:
 	EventBus.workers_changed.connect(func(_c, _n): _refresh_workers())
 
 func _on_turn_ended(turn: int) -> void:
-	_turn_lbl.text     = "День %d" % turn
-	_storm_lbl.visible = GameState.sandstorm_active
+	_turn_lbl.text       = "День %d" % turn
+	_storm_lbl.visible   = GameState.sandstorm_active
+	_turn_score_lbl.text = "Очки: %d" % GameState.get_score()
+	_reserves_lbl.text   = "Подземн.: %.0f ед." % GameState.get_total_water_reserves()
 
 func _on_water_changed(amount: float, net: float) -> void:
 	var sign = "+" if net >= 0.0 else ""
@@ -211,9 +219,9 @@ func _reject_survivors() -> void:
 		"description": "Вы отвергли выживших. Моральный дух поселенцев пошатнулся.",
 		"severity":    1,
 	})
-	GameState.discontent         = minf(100.0, GameState.discontent + 5.0)
-	GameState.survivors_waiting  = 0
-	_surv_panel.visible          = false
+	GameState.discontent        = minf(100.0, GameState.discontent + 5.0)
+	GameState.survivors_waiting = 0
+	_surv_panel.visible         = false
 
 # ─── Вспомогательные функции ─────────────────────────────────────────────────
 

@@ -66,6 +66,32 @@ func get_assigned_workers() -> int:
 func get_available_workers() -> int:
 	return maxi(0, population - get_assigned_workers())
 
+# ─── Деградация зданий ───────────────────────────────────────────────────────
+var building_durability: Dictionary = {}  # Vector2i → float (0–100)
+
+# ─── Прирост населения ────────────────────────────────────────────────────────
+var growth_timer: int = 0
+
+# ─── Испарение воды ───────────────────────────────────────────────────────────
+const WATER_EVAP_RATE: float = 0.04     # 4% запаса в ход
+var water_evaporation: float = 0.0
+
+# ─── Подземные запасы воды ────────────────────────────────────────────────────
+var tile_water_reserves: Dictionary = {}   # Vector2i → float (оставшиеся запасы)
+
+func get_total_water_reserves() -> float:
+	var total: float = 0.0
+	for coords in tile_water_reserves:
+		total += tile_water_reserves[coords]
+	return total
+
+# ─── Состояние игры ───────────────────────────────────────────────────────────
+var is_game_over:   bool   = false
+var pending_choice: bool   = false      # ждём ответа игрока на событие
+
+func get_score() -> int:
+	return int(happiness * float(population) * float(current_turn) / 100.0)
+
 # ─── Building affordability ───────────────────────────────────────────────────
 
 func can_afford(b_type: int) -> bool:

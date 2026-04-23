@@ -2,3 +2,5 @@
 .godot/
 .claude/
 /android/
+/build/
+*.tmp

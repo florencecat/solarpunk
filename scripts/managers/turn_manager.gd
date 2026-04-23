@@ -24,6 +24,11 @@ func _process(delta: float) -> void:
 		advance_turn()
 
 func advance_turn() -> void:
+	if GameState.is_game_over:
+		return
+	if GameState.pending_choice:
+		return
+
 	GameState.current_turn += 1
 	EventBus.turn_started.emit(GameState.current_turn)
 

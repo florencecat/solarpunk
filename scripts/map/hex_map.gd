@@ -3,7 +3,9 @@ extends Node3D
 
 const HEX_SIZE:   float = 1.10
 const MAP_RADIUS: int   = 5
-const MAX_WORKERS_PER_TILE: int = 10
+
+const WATER_RESERVE_MIN: float = 800.0
+const WATER_RESERVE_MAX: float = 2000.0
 
 var tiles: Dictionary = {}           # Vector2i → HexTile
 var _hovered:       Vector2i = Vector2i(-99, -99)
@@ -46,7 +48,9 @@ func _add_ground_plane() -> void:
 # ─── Генерация карты ──────────────────────────────────────────────────────────
 
 func _generate_map() -> void:
-	var rng = RandomNumberGenerator.new()
+	var rng    = RandomNumberGenerator.new()
+	var rng_wr = RandomNumberGenerator.new()
+	rng_wr.randomize()
 	for coords: Vector2i in HexGrid.get_hex_in_range(Vector2i.ZERO, MAP_RADIUS):
 		var t    = _pick_tile_type(coords, rng)
 		var tile = HexTile.new()
@@ -56,6 +60,10 @@ func _generate_map() -> void:
 		add_child(tile)
 		tiles[coords]               = tile
 		GameState.hex_tiles[coords] = tile
+		# Инициализируем подземные запасы для водных источников
+		if t == HexTile.TILE_WATER_SOURCE:
+			GameState.tile_water_reserves[coords] = \
+				rng_wr.randf_range(WATER_RESERVE_MIN, WATER_RESERVE_MAX)
 
 func _pick_tile_type(coords: Vector2i, rng: RandomNumberGenerator) -> int:
 	if coords == Vector2i.ZERO:
@@ -194,6 +202,7 @@ func _handle_click(coords: Vector2i) -> void:
 			return
 		GameState.spend_cost(GameState.selected_building_type)
 		tile.place_building(GameState.selected_building_type)
+		GameState.building_durability[coords] = 100.0   # инициализация прочности
 		EventBus.building_placed.emit(GameState.selected_building_type, coords)
 		EventBus.resources_changed.emit(GameState.sand, GameState.scrap, GameState.diamonds)
 	else:
@@ -218,17 +227,19 @@ func _deselect_tile() -> void:
 
 # ─── Назначение рабочих ──────────────────────────────────────────────────────
 
-func _on_assign_workers(coords: Vector2i, delta: int) -> void:
+func _on_assign_workers(coords: Vector2i, target: int) -> void:
 	var tile: HexTile = tiles.get(coords)
 	if not tile:
 		return
-	var current:   int = GameState.tile_workers.get(coords, 0)
+	var max_w:   int = tile.get_max_workers()
+	var current: int = GameState.tile_workers.get(coords, 0)
 	var new_count: int
-	if delta > 0:
-		var can_add = mini(delta, GameState.get_available_workers())
-		new_count   = mini(current + can_add, MAX_WORKERS_PER_TILE)
+	if target > current:
+		var can_add = mini(target - current, GameState.get_available_workers())
+		new_count   = current + can_add
 	else:
-		new_count = maxi(0, current + delta)
+		new_count = target
+	new_count = clampi(new_count, 0, max_w)
 	if new_count == current:
 		return
 	GameState.tile_workers[coords] = new_count

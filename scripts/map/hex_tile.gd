@@ -45,7 +45,7 @@ func _build_visuals() -> void:
 
 	# ── Основная призма ──────────────────────────────────────────────────────
 	_tile_mi          = MeshInstance3D.new()
-	_tile_mi.mesh     = _hex_prism(hex_size * 0.90, depth)
+	_tile_mi.mesh     = _hex_prism(hex_size * 0.95, depth)
 	_tile_mi.position = Vector3(0.0, -depth * 0.5, 0.0)   # верх = y=0
 	var mat           = StandardMaterial3D.new()
 	mat.albedo_color  = _tile_color(tile_type)
@@ -210,6 +210,19 @@ func update_workers(count: int) -> void:
 	_worker_lbl.visible = (count > 0)
 	if count > 0:
 		_worker_lbl.text = "w%d" % count
+
+## Максимальное число рабочих на тайле (зависит от постройки / типа тайла)
+func get_max_workers() -> int:
+	match building:
+		GameState.BUILDING_PUMP:            return 5
+		GameState.BUILDING_PURIFIER:        return 7
+		GameState.BUILDING_CONDENSER:       return 5
+		GameState.BUILDING_CARAVAN_STATION: return 2
+		GameState.BUILDING_MINE:            return 4
+	match tile_type:
+		TILE_MINE: return 4
+		TILE_SAND: return 2
+	return 0
 
 # ─── Постройки ────────────────────────────────────────────────────────────────
 
