@@ -19,6 +19,8 @@ func _ready() -> void:
 	visible = false
 	EventBus.choice_event_pending.connect(_on_choice_event)
 	EventBus.game_over.connect(_on_game_over)
+	EventBus.victory.connect(_on_victory)
+	EventBus.act_changed.connect(_on_act_changed)
 
 func _build() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -122,6 +124,26 @@ func _on_game_over(reason: String, score: int) -> void:
 		"Закрыть",
 		""
 	)
+
+func _on_victory(project_id: int, victory_text: String) -> void:
+	var mp_names = ["Древо Жизни", "Солнечный Шпиль", "Великий Исход"]
+	var name = mp_names[project_id] if project_id < mp_names.size() else "Мегапроект"
+	show_modal(
+		"ПОБЕДА!  «%s»" % name,
+		victory_text + "\n\nОчки: %d" % GameState.get_score(),
+		"Закрыть",
+		""
+	)
+
+func _on_act_changed(act: int) -> void:
+	var titles = ["", "Акт I: Основание", "Акт II: Расширение", "Акт III: Финал"]
+	var descs = ["",
+		"",
+		"Поселение выстояло. Открыты технологии второго акта — исследуйте их, пока давление не выросло.",
+		"Время завершить историю поселения. Выберите мегапроект в панели слева и начните строительство.",
+	]
+	if act >= 2 and act < titles.size():
+		show_modal(titles[act], descs[act], "Понятно", "")
 
 # ─── Кнопки ──────────────────────────────────────────────────────────────────
 

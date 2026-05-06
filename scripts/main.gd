@@ -9,11 +9,11 @@ var _env_res: Environment
 # Сферические координаты: yaw = горизонтальный угол, pitch = вертикальный угол
 # position = target + (sin(yaw)*cos(pitch), sin(pitch), cos(yaw)*cos(pitch)) * CAM_DIST
 
-const CAM_DIST:      float = 24.0   # расстояние от цели до камеры
+const CAM_DIST:      float = 32.0   # расстояние от цели до камеры
 const CAM_YAW_SPEED: float = 1.5    # рад/сек (клавиши Q/E)
 const CAM_MOUSE_SPEED: float = 0.004 # рад/пиксель (RMB-вращение)
 const CAM_PAN_SENSITIVITY: float = 2.0
-const CAM_TARGET_LIMIT: float = 14.0
+const CAM_TARGET_LIMIT: float = 20.0
 
 var _cam_yaw:    float   = 0.0
 var _cam_pitch:  float   = 0.96   # ~55° (сохраняет исходный ракурс)
@@ -64,7 +64,7 @@ func _create_world() -> void:
 	_camera            = Camera3D.new()
 	_camera.name       = "Camera3D"
 	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	_camera.size       = 16.0
+	_camera.size       = 22.0
 	add_child(_camera)
 	_update_camera_position()
 
@@ -100,9 +100,9 @@ func _input(event: InputEvent) -> void:
 					_drag_rmb = false
 
 			MOUSE_BUTTON_WHEEL_UP:
-				_camera.size = maxf(7.0, _camera.size - 0.9)
+				_camera.size = maxf(8.0, _camera.size - 1.2)
 			MOUSE_BUTTON_WHEEL_DOWN:
-				_camera.size = minf(28.0, _camera.size + 0.9)
+				_camera.size = minf(42.0, _camera.size + 1.2)
 
 	elif event is InputEventMouseMotion:
 		if _drag_rmb:
@@ -119,30 +119,38 @@ func _orbit_camera(delta: Vector2) -> void:
 # ─── Менеджеры ───────────────────────────────────────────────────────────────
 
 func _create_managers() -> void:
-	var rm = ResourceManager.new()
-	var pm = PopulationManager.new()
-	var wm = WorkerManager.new()
-	var em = EventManager.new()
-	var lm = LawsManager.new()
-	var tm = TurnManager.new()
+	var rm  = ResourceManager.new()
+	var pm  = PopulationManager.new()
+	var wm  = WorkerManager.new()
+	var em  = EventManager.new()
+	var lm  = LawsManager.new()
+	var rsm = ResearchManager.new()
+	var am  = ActManager.new()
+	var tm  = TurnManager.new()
 
-	rm.name = "ResourceManager"
-	pm.name = "PopulationManager"
-	wm.name = "WorkerManager"
-	em.name = "EventManager"
-	lm.name = "LawsManager"
-	tm.name = "TurnManager"
+	rm.name  = "ResourceManager"
+	pm.name  = "PopulationManager"
+	wm.name  = "WorkerManager"
+	em.name  = "EventManager"
+	lm.name  = "LawsManager"
+	rsm.name = "ResearchManager"
+	am.name  = "ActManager"
+	tm.name  = "TurnManager"
 
 	add_child(rm)
 	add_child(pm)
 	add_child(wm)
 	add_child(em)
 	add_child(lm)
+	add_child(rsm)
+	add_child(am)
 	add_child(tm)
 
 	tm.add_to_group("turn_manager")
-	tm.setup(rm, pm, wm, em)
+	tm.setup(rm, pm, wm, em, rsm, am)
 	set_meta("laws_manager", lm)
+	set_meta("research_manager", rsm)
+	set_meta("act_manager", am)
 
 # ─── Карта ───────────────────────────────────────────────────────────────────
 
@@ -158,50 +166,56 @@ func _create_ui() -> void:
 	ui.name = "UI"
 	add_child(ui)
 
+	# ── HUD (статичный тулбар) ────────────────────────────────────────────────
 	var hud = load("res://scripts/ui/hud.gd").new()
 	hud.name = "HUD"
 	hud.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	hud.custom_minimum_size = Vector2(960.0, 140.0)
 	ui.add_child(hud)
 
-	var elog = load("res://scripts/ui/event_log.gd").new()
-	elog.name = "EventLog"
-	elog.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	elog.offset_left   = -318.0
-	elog.offset_top    = -248.0
-	elog.offset_right  =   -8.0
-	elog.offset_bottom =   -8.0
-	ui.add_child(elog)
+	# ── Плавающие окна ────────────────────────────────────────────────────────
+	var vp := get_viewport().get_visible_rect().size
 
 	var bld = load("res://scripts/ui/building_panel.gd").new()
-	bld.name = "BuildingPanel"
-	bld.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
-	bld.offset_left   = -215.0
-	bld.offset_top    = -310.0
-	bld.offset_right  =   -8.0
-	bld.offset_bottom =  310.0
+	bld.name     = "BuildingPanel"
+	bld.position = Vector2(vp.x - 242.0, 156.0)
+	bld.size     = Vector2(234.0, 430.0)
 	ui.add_child(bld)
 
+	var elog = load("res://scripts/ui/event_log.gd").new()
+	elog.name     = "EventLog"
+	elog.position = Vector2(vp.x - 342.0, vp.y - 270.0)
+	elog.size     = Vector2(334.0, 262.0)
+	ui.add_child(elog)
+
 	var laws = load("res://scripts/ui/laws_panel.gd").new()
-	laws.name = "LawsPanel"
-	laws.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT)
-	laws.offset_left   =   8.0
-	laws.offset_top    = -240.0
-	laws.offset_right  =  245.0
-	laws.offset_bottom =  240.0
+	laws.name     = "LawsPanel"
+	laws.position = Vector2(8.0, 156.0)
+	laws.size     = Vector2(264.0, 460.0)
 	ui.add_child(laws)
 	laws.call_deferred("setup", get_meta("laws_manager"))
 
 	var tip = load("res://scripts/ui/tile_info_panel.gd").new()
-	tip.name = "TileInfoPanel"
-	tip.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	tip.offset_left   = -240.0
-	tip.offset_top    = -185.0
-	tip.offset_right  =  240.0
-	tip.offset_bottom =   -8.0
+	tip.name     = "TileInfoPanel"
+	tip.position = Vector2(vp.x * 0.5 - 242.0, vp.y - 200.0)
+	tip.size     = Vector2(484.0, 192.0)
 	ui.add_child(tip)
 
-	# Модальный оверлей поверх всего — отдельный слой
+	var rp = load("res://scripts/ui/research_panel.gd").new()
+	rp.name     = "ResearchPanel"
+	rp.position = Vector2(8.0, 156.0)
+	rp.size     = Vector2(268.0, 440.0)
+	ui.add_child(rp)
+	rp.call_deferred("setup", get_meta("research_manager"))
+
+	var mp = load("res://scripts/ui/megaproject_panel.gd").new()
+	mp.name     = "MegaprojectPanel"
+	mp.position = Vector2(8.0, 156.0)
+	mp.size     = Vector2(268.0, 360.0)
+	ui.add_child(mp)
+	mp.call_deferred("setup", get_meta("act_manager"))
+
+	# ── Модальный оверлей (выше всего) ───────────────────────────────────────
 	var modal_layer      = CanvasLayer.new()
 	modal_layer.layer    = 20
 	modal_layer.name     = "ModalLayer"

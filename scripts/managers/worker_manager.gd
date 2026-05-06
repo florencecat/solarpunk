@@ -13,12 +13,14 @@ func process_turn() -> void:
 func _mine_resources() -> void:
 	var resources_changed := false
 
-	# Множитель выработки от законов
+	# Множитель выработки от законов и технологий
 	var output_mult: float = 1.0
 	if GameState.active_laws.get(LawsManager.LAW_HARSH_REGIME, false):
 		output_mult *= 1.25
 	if GameState.active_laws.get(LawsManager.LAW_WATER_RATIONING, false):
 		output_mult *= 0.85
+	# Технология «Горнодобыча» (+20% для шахт)
+	var mine_mult: float = output_mult * (1.0 + GameState.get_meta("research_bonuses", {}).get("mine_mult", 0.0))
 
 	for coords: Vector2i in GameState.tile_workers:
 		var count: int = GameState.tile_workers[coords]
@@ -29,7 +31,7 @@ func _mine_resources() -> void:
 			continue
 
 		if _is_mine(tile):
-			_process_mine(coords, tile, count, output_mult)
+			_process_mine(coords, tile, count, mine_mult)   # шахты получают tech-бонус
 			resources_changed = true
 		elif tile.building < 0:
 			# Открытая добыча песчаника — безопасно

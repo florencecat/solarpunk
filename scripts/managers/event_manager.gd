@@ -91,7 +91,9 @@ func _roll_source_dry() -> void:
 		"Подземный пласт воды истощился. Насосы в этом районе потеряли мощность.", 2)
 
 func _roll_caravan() -> void:
-	if not _has_caravan_station() or _rng.randf() >= CHANCE_CARAVAN:
+	# Технология «Торговые пути» повышает шанс каравана
+	var caravan_chance: float = CHANCE_CARAVAN + GameState.get_meta("research_bonuses", {}).get("caravan_bonus", 0.0)
+	if not _has_caravan_station() or _rng.randf() >= caravan_chance:
 		return
 	var gain = float(_rng.randi_range(30, 90))
 	GameState.water += gain

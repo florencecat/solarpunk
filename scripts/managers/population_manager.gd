@@ -59,10 +59,12 @@ func _update_discontent() -> void:
 		var gain = (GameState.thirst - 20.0) * DISCORD_RATE * 0.1
 		GameState.discontent = minf(100.0, GameState.discontent + gain)
 	else:
-		# Восстановление — замедлено при Водных кастах
-		var cool = DISCORD_COOL
+		# Восстановление — замедлено при Водных кастах, ускорено технологией
+		var cool: float = DISCORD_COOL
 		if GameState.active_laws.get(LawsManager.LAW_WATER_CASTES, false):
 			cool *= 0.5
+		# Технология «Коммунальный уклад» (+50% к восстановлению морали)
+		cool *= (1.0 + GameState.get_meta("research_bonuses", {}).get("discord_cool_mult", 0.0))
 		GameState.discontent = maxf(0.0, GameState.discontent - cool)
 
 	# Штрафы законов

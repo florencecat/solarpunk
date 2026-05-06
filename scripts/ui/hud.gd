@@ -11,6 +11,7 @@ var _discontent_bar: ProgressBar
 var _res_lbl:        Label
 var _workers_lbl:    Label
 var _turn_score_lbl: Label
+var _act_lbl:        Label
 var _riot_panel:     Control
 var _storm_lbl:      Label
 var _surv_panel:     Control
@@ -39,10 +40,33 @@ func _build_ui() -> void:
 	var tv = VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 4)
 	tp.add_child(tv)
+
 	_turn_lbl = _lbl("День 0", 18, Color(0.95, 0.76, 0.32))
 	tv.add_child(_turn_lbl)
 	_turn_score_lbl = _lbl("Очки: —", 11, Color(0.70, 0.70, 0.70))
 	tv.add_child(_turn_score_lbl)
+	_act_lbl = _lbl("Акт I: Основание", 11, Color(0.60, 0.90, 0.70))
+	tv.add_child(_act_lbl)
+
+	# Кнопки открытия окон
+	var btn_row = HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 4)
+	tv.add_child(btn_row)
+	for pair in [
+		["🏗", "BuildingPanel"],
+		["📋", "EventLog"],
+		["⚖", "LawsPanel"],
+		["🔬", "ResearchPanel"],
+		["🏛", "MegaprojectPanel"],
+	]:
+		var b = Button.new()
+		b.text = pair[0]
+		b.tooltip_text = pair[1]
+		b.custom_minimum_size = Vector2(34, 28)
+		var pname = pair[1]
+		b.pressed.connect(func(): _toggle_panel(pname))
+		btn_row.add_child(b)
+
 	_auto_btn = Button.new()
 	_auto_btn.text = "▶  Авто: ВЫКЛ"
 	_auto_btn.pressed.connect(_toggle_auto)
@@ -108,7 +132,7 @@ func _build_ui() -> void:
 	rv.add_child(_res_lbl)
 
 	# ── Бунт ─────────────────────────────────────────────────────────────────
-	_riot_panel = _panel(Color(0.72, 0.02, 0.02, 0.95))
+	_riot_panel          = _panel(Color(0.72, 0.02, 0.02, 0.95))
 	_riot_panel.position = Vector2(8.0, 130.0)
 	_riot_panel.visible  = false
 	add_child(_riot_panel)
@@ -154,6 +178,14 @@ func _connect_signals() -> void:
 	EventBus.survivor_arrived.connect(_on_survivor_arrived)
 	EventBus.resources_changed.connect(_on_resources_changed)
 	EventBus.workers_changed.connect(func(_c, _n): _refresh_workers())
+	EventBus.act_changed.connect(_on_act_changed)
+
+func _on_act_changed(act: int) -> void:
+	var names  = ["", "Акт I: Основание", "Акт II: Расширение", "Акт III: Финал"]
+	var colors = [Color.WHITE, Color(0.60, 0.90, 0.70), Color(0.55, 0.80, 1.0), Color(0.90, 0.65, 1.0)]
+	if act < names.size():
+		_act_lbl.text = names[act]
+		_act_lbl.add_theme_color_override("font_color", colors[act])
 
 func _on_turn_ended(turn: int) -> void:
 	_turn_lbl.text       = "День %d" % turn
@@ -189,9 +221,14 @@ func _on_survivor_arrived(count: int) -> void:
 
 # ─── Обработчики кнопок ──────────────────────────────────────────────────────
 
+func _toggle_panel(panel_name: String) -> void:
+	var panel = get_tree().get_root().find_child(panel_name, true, false)
+	if panel:
+		panel.visible = not panel.visible
+
 func _toggle_auto() -> void:
 	GameState.auto_turn = not GameState.auto_turn
-	_auto_btn.text = ("Авто: ВКЛ" if GameState.auto_turn else "Авто: ВЫКЛ")
+	_auto_btn.text = ("▶  Авто: ВКЛ" if GameState.auto_turn else "▶  Авто: ВЫКЛ")
 
 func _next_turn() -> void:
 	var tm = get_tree().get_first_node_in_group("turn_manager")
@@ -229,14 +266,10 @@ func _panel(color: Color) -> PanelContainer:
 	var p = PanelContainer.new()
 	var s = StyleBoxFlat.new()
 	s.bg_color = color
-	s.corner_radius_top_left    = 6
-	s.corner_radius_top_right   = 6
-	s.corner_radius_bottom_left  = 6
-	s.corner_radius_bottom_right = 6
-	s.content_margin_left   = 10.0
-	s.content_margin_right  = 10.0
-	s.content_margin_top    = 7.0
-	s.content_margin_bottom = 7.0
+	s.corner_radius_top_left    = 6; s.corner_radius_top_right    = 6
+	s.corner_radius_bottom_left = 6; s.corner_radius_bottom_right = 6
+	s.content_margin_left   = 10.0; s.content_margin_right  = 10.0
+	s.content_margin_top    = 7.0;  s.content_margin_bottom = 7.0
 	p.add_theme_stylebox_override("panel", s)
 	return p
 
@@ -253,10 +286,8 @@ func _bar(fill_color: Color, width: float = 120.0) -> ProgressBar:
 	b.max_value           = 100.0
 	b.value               = 0.0
 	b.show_percentage     = false
-	var fs = StyleBoxFlat.new()
-	fs.bg_color = fill_color
+	var fs = StyleBoxFlat.new(); fs.bg_color = fill_color
 	b.add_theme_stylebox_override("fill", fs)
-	var bs = StyleBoxFlat.new()
-	bs.bg_color = Color(0.14, 0.14, 0.14)
+	var bs = StyleBoxFlat.new(); bs.bg_color = Color(0.14, 0.14, 0.14)
 	b.add_theme_stylebox_override("background", bs)
 	return b

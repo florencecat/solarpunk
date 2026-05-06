@@ -18,7 +18,6 @@ func _decay_durability() -> void:
 		var tile: HexTile = GameState.hex_tiles[coords]
 		if tile.building < 0:
 			continue
-		# Инициализируем, если здание новое
 		if not GameState.building_durability.has(coords):
 			GameState.building_durability[coords] = 100.0
 		var decay: float = 4.0 if GameState.sandstorm_active else 1.5
@@ -28,17 +27,22 @@ func _decay_durability() -> void:
 func _calc_production() -> void:
 	var gain: float = 0.0
 
+	# Глобальный бонус от техники «Солнечная энергетика»
+	var global_mult: float = 1.0 + _rb("global_mult")
+
 	for coords: Vector2i in GameState.hex_tiles:
 		var tile: HexTile = GameState.hex_tiles[coords]
 		if tile.building < 0:
 			continue
-		# Постройка работает только при наличии рабочих
 		if GameState.tile_workers.get(coords, 0) == 0:
 			continue
 
-		# Эффективность = прочность / 100
+		# Прочность → КПД
 		var dur: float = GameState.building_durability.get(coords, 100.0)
-		var eff: float = dur / 100.0
+		var eff: float = dur / 100.0 * global_mult
+
+		# Смежностный множитель
+		var adj: float = _adjacency_mult(coords, tile.building)
 
 		match tile.building:
 			GameState.BUILDING_PUMP:
@@ -47,8 +51,8 @@ func _calc_production() -> void:
 					HexTile.TILE_OASIS:        bonus = 3.0
 					HexTile.TILE_WATER_SOURCE: bonus = 2.5
 					HexTile.TILE_DRY_SOURCE:   bonus = 0.3
-				var pump_gain: float = 5.0 * bonus * eff
-				# Водные источники ограничены подземными запасами
+				var pump_gain: float = 5.0 * bonus * eff * adj
+				# Истощение подземных запасов
 				if tile.tile_type == HexTile.TILE_WATER_SOURCE:
 					if GameState.tile_water_reserves.has(coords):
 						var reserves: float = GameState.tile_water_reserves[coords]
@@ -66,17 +70,17 @@ func _calc_production() -> void:
 				gain += pump_gain
 
 			GameState.BUILDING_PURIFIER:
-				var to_purify = minf(GameState.dirty_water, 12.0 * eff)
+				# Бонус технологии «Водоочистка»
+				var purifier_mult: float = 1.0 + _rb("purifier_mult")
+				var to_purify := minf(GameState.dirty_water, 12.0 * eff * adj * purifier_mult)
 				GameState.dirty_water -= to_purify
 				gain += to_purify * 0.80
 
 			GameState.BUILDING_CONDENSER:
-				gain += 2.0 * eff
+				# Бонус технологии «Атмосферная конденсация»
+				var condenser_mult: float = 1.0 + _rb("condenser_mult")
+				gain += 2.0 * eff * adj * condenser_mult
 
-			# CARAVAN_STATION не производит воду напрямую
-
-	# Штраф от песчаной бури применяется в event_manager,
-	# здесь мы только суммируем чистую добычу
 	GameState.water_production = gain
 
 func _calc_consumption() -> void:
@@ -90,9 +94,38 @@ func _calc_consumption() -> void:
 	GameState.water_consumption = base
 
 func _apply_net() -> void:
-	# Испарение: 4% запаса воды за ход
 	var evap: float = GameState.water * GameState.WATER_EVAP_RATE
 	GameState.water_evaporation = evap
-	var net: float = GameState.water_production - GameState.water_consumption
+	var net: float  = GameState.water_production - GameState.water_consumption
 	GameState.water_net = net
 	GameState.water = maxf(0.0, GameState.water + net - evap)
+
+# ─── Смежностные бонусы ───────────────────────────────────────────────────────
+
+func _adjacency_mult(coords: Vector2i, building: int) -> float:
+	var mult: float = 1.0
+	for nb_coords: Vector2i in HexGrid.get_neighbors(coords):
+		var nb: HexTile = GameState.hex_tiles.get(nb_coords)
+		if not nb:
+			continue
+		match building:
+			GameState.BUILDING_PUMP:
+				# Рядом с оазисом или источником — бонус к добыче
+				if nb.tile_type == HexTile.TILE_OASIS:
+					mult += 0.30
+				elif nb.tile_type == HexTile.TILE_WATER_SOURCE:
+					mult += 0.15
+			GameState.BUILDING_PURIFIER:
+				# Рядом с насосом — быстрее получает сырьё
+				if nb.building == GameState.BUILDING_PUMP:
+					mult += 0.20
+			GameState.BUILDING_CONDENSER:
+				# Конкуренция за влагу с соседним конденсатором
+				if nb.building == GameState.BUILDING_CONDENSER:
+					mult -= 0.15
+	return maxf(0.10, mult)
+
+# ─── Хелпер: research bonus ───────────────────────────────────────────────────
+
+func _rb(key: String) -> float:
+	return GameState.get_meta("research_bonuses", {}).get(key, 0.0)

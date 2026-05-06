@@ -85,8 +85,22 @@ func get_total_water_reserves() -> float:
 		total += tile_water_reserves[coords]
 	return total
 
+# ─── Акты (3-актовая структура) ──────────────────────────────────────────────
+var current_act: int = 1   # 1 = Основание, 2 = Расширение, 3 = Эндгейм
+
+# ─── Исследования ─────────────────────────────────────────────────────────────
+var unlocked_techs:      Array = []   # Array[int] — завершённые технологии
+var active_research:     int   = -1   # ID технологии в работе, -1 = нет
+var research_turns_left: int   = 0    # ходов до завершения текущего исследования
+
+# ─── Мегапроекты ──────────────────────────────────────────────────────────────
+var unlocked_megaprojects: Array = []   # Array[int] — доступные проекты
+var megaproject_id:        int   = -1   # выбранный мегапроект (-1 = нет)
+var megaproject_turns_left: int  = 0    # ходов до завершения строительства
+
 # ─── Состояние игры ───────────────────────────────────────────────────────────
 var is_game_over:   bool   = false
+var is_victory:     bool   = false
 var pending_choice: bool   = false      # ждём ответа игрока на событие
 
 func get_score() -> int:

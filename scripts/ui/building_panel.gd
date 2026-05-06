@@ -1,42 +1,19 @@
-extends Control
+extends FloatingWindow
 
-var _selected:    int        = -1
-var _btns:        Dictionary = {}    # b_type → Button
-var _cost_lbls:   Dictionary = {}    # b_type → Label (стоимость)
+var _selected:  int        = -1
+var _btns:      Dictionary = {}     # b_type → Button
+var _cost_lbls: Dictionary = {}     # b_type → Label
+
+func _get_title() -> String:
+	return "🏗  Постройки"
 
 func _ready() -> void:
-	_build_ui()
+	super._ready()
 	EventBus.building_type_selected.connect(_on_type_selected)
 	EventBus.resources_changed.connect(func(_s, _sc, _d): _refresh_affordability())
 	_refresh_affordability()
 
-func _build_ui() -> void:
-	var root = PanelContainer.new()
-	var s    = StyleBoxFlat.new()
-	s.bg_color                  = Color(0.06, 0.12, 0.07, 0.96)
-	s.corner_radius_top_left    = 8
-	s.corner_radius_top_right   = 8
-	s.corner_radius_bottom_left  = 8
-	s.corner_radius_bottom_right = 8
-	s.content_margin_left   = 12.0
-	s.content_margin_right  = 12.0
-	s.content_margin_top    = 10.0
-	s.content_margin_bottom = 10.0
-	root.add_theme_stylebox_override("panel", s)
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	root.add_child(vbox)
-
-	var hdr = Label.new()
-	hdr.text = "ПОСТРОЙКИ"
-	hdr.add_theme_font_size_override("font_size", 15)
-	hdr.add_theme_color_override("font_color", Color(0.50, 0.92, 0.42))
-	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(hdr)
-
+func _build_content(vbox: VBoxContainer) -> void:
 	var hint = Label.new()
 	hint.text = "ЛКМ — выбрать  ·  ПКМ — снять"
 	hint.add_theme_font_size_override("font_size", 10)
@@ -45,14 +22,9 @@ func _build_ui() -> void:
 	vbox.add_child(hint)
 	vbox.add_child(HSeparator.new())
 
-	var all_types = [
-		GameState.BUILDING_PUMP,
-		GameState.BUILDING_PURIFIER,
-		GameState.BUILDING_CONDENSER,
-		GameState.BUILDING_CARAVAN_STATION,
-		GameState.BUILDING_MINE,
-	]
-	for b: int in all_types:
+	for b: int in [GameState.BUILDING_PUMP, GameState.BUILDING_PURIFIER,
+				   GameState.BUILDING_CONDENSER, GameState.BUILDING_CARAVAN_STATION,
+				   GameState.BUILDING_MINE]:
 		vbox.add_child(_bld_entry(b))
 
 func _bld_entry(b: int) -> Control:
@@ -114,9 +86,9 @@ func _refresh_affordability() -> void:
 func _style_btn(btn: Button, color: Color, selected: bool, affordable: bool) -> void:
 	var dim  = 0.18 if not affordable else (0.55 if selected else 0.25)
 	var s    = StyleBoxFlat.new()
-	s.bg_color    = Color(color.r * dim, color.g * dim, color.b * dim, 1.0)
-	var b_col     = (color if selected else
-					 Color(color.r * 0.55, color.g * 0.55, color.b * 0.55, 1.0))
+	s.bg_color = Color(color.r * dim, color.g * dim, color.b * dim, 1.0)
+	var b_col = (color if selected else
+				 Color(color.r * 0.55, color.g * 0.55, color.b * 0.55, 1.0))
 	if not affordable:
 		b_col = Color(0.35, 0.35, 0.35, 1.0)
 	s.border_color = b_col

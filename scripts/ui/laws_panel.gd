@@ -1,45 +1,21 @@
-extends Control
+extends FloatingWindow
 
 var _laws_mgr: LawsManager
 var _btn_map:  Dictionary = {}   # law_id → {enact: Button, repeal: Button}
 
+func _get_title() -> String:
+	return "⚖  Законы"
+
+func _build_content(_vbox: VBoxContainer) -> void:
+	pass  # заполняется в setup()
+
 ## Вызывается из main.gd после добавления узла в дерево
 func setup(mgr: LawsManager) -> void:
 	_laws_mgr = mgr
-	_build_ui()
+	for law_id: int in LawsManager.ALL_LAWS:
+		_content_vbox.add_child(_law_entry(law_id))
 	EventBus.law_enacted.connect(_refresh_buttons)
 	EventBus.law_repealed.connect(_refresh_buttons)
-
-func _build_ui() -> void:
-	var root = PanelContainer.new()
-	var s    = StyleBoxFlat.new()
-	s.bg_color                  = Color(0.09, 0.07, 0.14, 0.96)
-	s.corner_radius_top_left    = 8
-	s.corner_radius_top_right   = 8
-	s.corner_radius_bottom_left  = 8
-	s.corner_radius_bottom_right = 8
-	s.content_margin_left   = 12.0
-	s.content_margin_right  = 12.0
-	s.content_margin_top    = 10.0
-	s.content_margin_bottom = 10.0
-	root.add_theme_stylebox_override("panel", s)
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	root.add_child(vbox)
-
-	var hdr = Label.new()
-	hdr.text = "⚖   ЗАКОНЫ"
-	hdr.add_theme_font_size_override("font_size", 15)
-	hdr.add_theme_color_override("font_color", Color(0.80, 0.64, 1.0))
-	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(hdr)
-	vbox.add_child(HSeparator.new())
-
-	for law_id: int in LawsManager.ALL_LAWS:
-		vbox.add_child(_law_entry(law_id))
 
 func _law_entry(law_id: int) -> Control:
 	var meta: Dictionary = LawsManager.LAW_META[law_id]

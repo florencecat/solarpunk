@@ -1,44 +1,21 @@
-extends Control
+extends FloatingWindow
 
 const MAX_ENTRIES = 25
 
 var _list:   VBoxContainer
 var _scroll: ScrollContainer
 
+func _get_title() -> String:
+	return "📋  Журнал событий"
+
 func _ready() -> void:
-	_build_ui()
+	super._ready()
 	EventBus.game_event.connect(_on_event)
 
-func _build_ui() -> void:
-	var root = PanelContainer.new()
-	var s    = StyleBoxFlat.new()
-	s.bg_color                  = Color(0.07, 0.06, 0.04, 0.94)
-	s.corner_radius_top_left    = 6
-	s.corner_radius_top_right   = 6
-	s.corner_radius_bottom_left  = 6
-	s.corner_radius_bottom_right = 6
-	s.content_margin_left   = 8.0
-	s.content_margin_right  = 8.0
-	s.content_margin_top    = 6.0
-	s.content_margin_bottom = 6.0
-	root.add_theme_stylebox_override("panel", s)
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-
-	var vbox = VBoxContainer.new()
-	root.add_child(vbox)
-
-	var hdr = Label.new()
-	hdr.text = "ЖУРНАЛ СОБЫТИЙ"
-	hdr.add_theme_font_size_override("font_size", 12)
-	hdr.add_theme_color_override("font_color", Color(0.60, 0.52, 0.34))
-	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(hdr)
-	vbox.add_child(HSeparator.new())
-
+func _build_content(vbox: VBoxContainer) -> void:
 	_scroll = ScrollContainer.new()
-	_scroll.size_flags_vertical  = Control.SIZE_EXPAND_FILL
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.size_flags_vertical        = Control.SIZE_EXPAND_FILL
+	_scroll.horizontal_scroll_mode     = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(_scroll)
 
 	_list = VBoxContainer.new()

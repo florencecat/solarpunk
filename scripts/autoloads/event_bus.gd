@@ -49,3 +49,16 @@ signal game_over(reason: String, score: int)
 signal choice_event_pending(event: Dictionary)  # {title, desc, choice_a, choice_b}
 @warning_ignore("unused_signal")
 signal choice_resolved(choice: int)             # 0 = A (первый), 1 = B (второй)
+
+@warning_ignore("unused_signal")
+signal act_changed(act: int)                    # 1, 2, 3
+@warning_ignore("unused_signal")
+signal research_started(tech_id: int)
+@warning_ignore("unused_signal")
+signal tech_researched(tech_id: int)
+@warning_ignore("unused_signal")
+signal megaproject_started(project_id: int)
+@warning_ignore("unused_signal")
+signal megaproject_progress(turns_left: int, turns_total: int)
+@warning_ignore("unused_signal")
+signal victory(project_id: int, victory_text: String)

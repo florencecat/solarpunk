@@ -397,6 +397,8 @@ static func _hex_prism(size: float, depth: float) -> ArrayMesh:
 		indices.append(b0 + i + 1)
 
 	# ── Боковые грани ─────────────────────────────────────────────────────────
+	# Godot/Vulkan использует CW-обмотку для лицевых граней (снаружи).
+	# Порядок: A,C,B и A,D,C — CW со стороны внешней нормали.
 	for i in range(6):
 		var j  = (i + 1) % 6
 		var p0 = pts[i]
@@ -408,8 +410,8 @@ static func _hex_prism(size: float, depth: float) -> ArrayMesh:
 		verts.append(Vector3(p1.x, -half, p1.y))   # C: низ, следующий
 		verts.append(Vector3(p0.x, -half, p0.y))   # D: низ, текущий
 		for _k in range(4): norms.append(n)
-		indices.append(s); indices.append(s + 1); indices.append(s + 2)
-		indices.append(s); indices.append(s + 2); indices.append(s + 3)
+		indices.append(s); indices.append(s + 2); indices.append(s + 1)
+		indices.append(s); indices.append(s + 3); indices.append(s + 2)
 
 	var arrays = []
 	arrays.resize(Mesh.ARRAY_MAX)
