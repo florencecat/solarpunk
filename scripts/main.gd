@@ -30,7 +30,7 @@ func _ready() -> void:
 	_create_managers()
 	_create_map()
 	_create_ui()
-	_emit_initial_state()
+	_show_menu()
 	EventBus.turn_ended.connect(_on_turn_ended)
 
 # ─── Мир (камера, свет, окружение) ───────────────────────────────────────────
@@ -185,19 +185,18 @@ func _create_ui() -> void:
 	ui.name = "UI"
 	add_child(ui)
 
-	# ── HUD (статичный тулбар) ────────────────────────────────────────────────
+	# ── HUD (полноширинный тулбар) ───────────────────────────────────────────
 	var hud = load("res://scripts/ui/hud.gd").new()
 	hud.name = "HUD"
-	hud.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	hud.custom_minimum_size = Vector2(960.0, 140.0)
 	ui.add_child(hud)
 
 	# ── Плавающие окна ────────────────────────────────────────────────────────
 	var vp := get_viewport().get_visible_rect().size
+	var hud_h := 100.0   # высота HUD (2 строки)
 
 	var bld = load("res://scripts/ui/building_panel.gd").new()
 	bld.name     = "BuildingPanel"
-	bld.position = Vector2(vp.x - 242.0, 156.0)
+	bld.position = Vector2(vp.x - 242.0, hud_h + 8.0)
 	bld.size     = Vector2(248.0, 500.0)
 	ui.add_child(bld)
 
@@ -209,7 +208,7 @@ func _create_ui() -> void:
 
 	var laws = load("res://scripts/ui/laws_panel.gd").new()
 	laws.name     = "LawsPanel"
-	laws.position = Vector2(8.0, 156.0)
+	laws.position = Vector2(8.0, hud_h + 8.0)
 	laws.size     = Vector2(264.0, 460.0)
 	ui.add_child(laws)
 	laws.call_deferred("setup", get_meta("laws_manager"))
@@ -222,23 +221,38 @@ func _create_ui() -> void:
 
 	var rp = load("res://scripts/ui/research_panel.gd").new()
 	rp.name     = "ResearchPanel"
-	rp.position = Vector2(8.0, 156.0)
+	rp.position = Vector2(8.0, hud_h + 8.0)
 	rp.size     = Vector2(268.0, 440.0)
 	ui.add_child(rp)
 	rp.call_deferred("setup", get_meta("research_manager"))
 
 	var mp = load("res://scripts/ui/megaproject_panel.gd").new()
 	mp.name     = "MegaprojectPanel"
-	mp.position = Vector2(8.0, 156.0)
+	mp.position = Vector2(8.0, hud_h + 8.0)
 	mp.size     = Vector2(268.0, 360.0)
 	ui.add_child(mp)
 	mp.call_deferred("setup", get_meta("act_manager"))
 
 	var sp = load("res://scripts/ui/specialists_panel.gd").new()
 	sp.name     = "SpecialistsPanel"
-	sp.position = Vector2(8.0, 156.0)
+	sp.position = Vector2(8.0, hud_h + 8.0)
 	sp.size     = Vector2(268.0, 380.0)
 	ui.add_child(sp)
+
+	# ── Каталог построек ─────────────────────────────────────────────────────
+	var cat = load("res://scripts/ui/building_catalog.gd").new()
+	cat.name     = "BuildingCatalog"
+	cat.position = Vector2(vp.x * 0.5 - 350.0, vp.y * 0.5 - 280.0)
+	cat.size     = Vector2(700.0, 560.0)
+	ui.add_child(cat)
+
+	# ── Нижняя панель быстрого доступа (трей) ─────────────────────────────────
+	var tray = load("res://scripts/ui/building_tray.gd").new()
+	tray.name = "BuildingTray"
+	ui.add_child(tray)
+	tray.catalog_requested.connect(func():
+		cat.visible = not cat.visible
+	)
 
 	# ── Модальный оверлей (выше всего) ───────────────────────────────────────
 	var modal_layer      = CanvasLayer.new()
@@ -248,6 +262,26 @@ func _create_ui() -> void:
 	var modal = load("res://scripts/ui/modal_overlay.gd").new()
 	modal.name = "ModalOverlay"
 	modal_layer.add_child(modal)
+
+# ─── Меню ────────────────────────────────────────────────────────────────────
+
+func _show_menu() -> void:
+	var menu_layer      = CanvasLayer.new()
+	menu_layer.layer    = 30
+	menu_layer.name     = "MenuLayer"
+	add_child(menu_layer)
+
+	var menu = load("res://scripts/ui/main_menu.gd").new()
+	menu.name = "MainMenu"
+	menu_layer.add_child(menu)
+
+	menu.new_game.connect(func():
+		menu_layer.queue_free()
+		_emit_initial_state()
+	)
+	menu.quit_game.connect(func():
+		get_tree().quit()
+	)
 
 # ─── Эффект песчаной бури ────────────────────────────────────────────────────
 

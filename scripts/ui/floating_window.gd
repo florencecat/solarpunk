@@ -30,6 +30,10 @@ func _build_content(_vbox: VBoxContainer) -> void:
 # ─── Рамка окна ──────────────────────────────────────────────────────────────
 
 func _build_chrome() -> void:
+	# Угловые скобки поверх всего окна (отрисовываются в _draw)
+	queue_redraw()
+	resized.connect(queue_redraw)
+
 	var root_vbox = VBoxContainer.new()
 	root_vbox.add_theme_constant_override("separation", 0)
 	root_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -38,13 +42,13 @@ func _build_chrome() -> void:
 	# ── Полоса заголовка ──────────────────────────────────────────────────────
 	var title_panel = PanelContainer.new()
 	var ts          = StyleBoxFlat.new()
-	ts.bg_color                  = Color(0.16, 0.12, 0.08, 0.98)
-	ts.corner_radius_top_left    = 6
-	ts.corner_radius_top_right   = 6
-	ts.content_margin_left       = 8.0
+	ts.bg_color                  = Color(0.14, 0.10, 0.06, 0.98)
+	ts.corner_radius_top_left    = 4
+	ts.corner_radius_top_right   = 4
+	ts.content_margin_left       = 10.0
 	ts.content_margin_right      = 4.0
-	ts.content_margin_top        = 5.0
-	ts.content_margin_bottom     = 5.0
+	ts.content_margin_top        = 6.0
+	ts.content_margin_bottom     = 6.0
 	title_panel.add_theme_stylebox_override("panel", ts)
 	title_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	title_panel.gui_input.connect(_on_titlebar_gui_input)
@@ -125,3 +129,25 @@ func _on_close() -> void:
 ## Переключить видимость окна
 func toggle() -> void:
 	visible = not visible
+
+## Угловые скобки в стиле дизайна WindowChrome
+func _draw() -> void:
+	if not visible:
+		return
+	var w  := size.x
+	var h  := size.y
+	var sz := 14.0
+	var c  := Color(0.831, 0.710, 0.463, 0.75)   # sand
+	var lw := 1.5
+	# Top-left
+	draw_line(Vector2(0, sz),  Vector2(0, 0),  c, lw)
+	draw_line(Vector2(0, 0),   Vector2(sz, 0), c, lw)
+	# Top-right
+	draw_line(Vector2(w-sz, 0), Vector2(w, 0),  c, lw)
+	draw_line(Vector2(w, 0),    Vector2(w, sz), c, lw)
+	# Bottom-left
+	draw_line(Vector2(0, h-sz), Vector2(0, h),  c, lw)
+	draw_line(Vector2(0, h),    Vector2(sz, h), c, lw)
+	# Bottom-right
+	draw_line(Vector2(w-sz, h), Vector2(w, h),  c, lw)
+	draw_line(Vector2(w, h),    Vector2(w, h-sz), c, lw)
