@@ -8,14 +8,18 @@ var _reserves_lbl:   Label
 var _pop_lbl:        Label
 var _thirst_bar:     ProgressBar
 var _discontent_bar: ProgressBar
+var _hunger_bar:     ProgressBar
 var _res_lbl:        Label
+var _food_lbl:       Label
+var _energy_lbl:     Label
+var _energy_bar:     ProgressBar
 var _workers_lbl:    Label
 var _turn_score_lbl: Label
 var _act_lbl:        Label
+var _night_lbl:      Label
 var _riot_panel:     Control
 var _storm_lbl:      Label
-var _surv_panel:     Control
-var _surv_lbl:       Label
+var _raider_lbl:     Label
 
 func _ready() -> void:
 	_build_ui()
@@ -25,6 +29,8 @@ func _ready() -> void:
 	_on_population_changed(GameState.population)
 	_on_mood_changed(GameState.happiness, GameState.thirst, GameState.discontent)
 	_on_resources_changed(GameState.sand, GameState.scrap, GameState.diamonds)
+	_on_food_changed(GameState.food, 0.0)
+	_on_energy_changed(0.0, 0.0, 1.0)
 
 # ─── Построение UI ───────────────────────────────────────────────────────────
 
@@ -58,6 +64,7 @@ func _build_ui() -> void:
 		["⚖", "LawsPanel"],
 		["🔬", "ResearchPanel"],
 		["🏛", "MegaprojectPanel"],
+		["👥", "SpecialistsPanel"],
 	]:
 		var b = Button.new()
 		b.text = pair[0]
@@ -112,13 +119,18 @@ func _build_ui() -> void:
 	mv.add_child(_lbl("САМОЧУВСТВИЕ", 11, Color(0.85, 0.55, 0.55)))
 	var th_row = HBoxContainer.new()
 	mv.add_child(th_row)
-	th_row.add_child(_lbl("Жажда    ", 11))
-	_thirst_bar = _bar(Color(0.95, 0.52, 0.10), 115.0)
+	th_row.add_child(_lbl("Жажда  ", 11))
+	_thirst_bar = _bar(Color(0.95, 0.52, 0.10), 100.0)
 	th_row.add_child(_thirst_bar)
+	var hu_row = HBoxContainer.new()
+	mv.add_child(hu_row)
+	hu_row.add_child(_lbl("Голод  ", 11))
+	_hunger_bar = _bar(Color(0.88, 0.70, 0.15), 100.0)
+	hu_row.add_child(_hunger_bar)
 	var dc_row = HBoxContainer.new()
 	mv.add_child(dc_row)
-	dc_row.add_child(_lbl("Недовол. ", 11))
-	_discontent_bar = _bar(Color(0.95, 0.20, 0.20), 115.0)
+	dc_row.add_child(_lbl("Недов. ", 11))
+	_discontent_bar = _bar(Color(0.95, 0.20, 0.20), 100.0)
 	dc_row.add_child(_discontent_bar)
 
 	# ── Панель ресурсов ──────────────────────────────────────────────────────
@@ -131,6 +143,25 @@ func _build_ui() -> void:
 	_res_lbl = _lbl("—", 13, Color.WHITE)
 	rv.add_child(_res_lbl)
 
+	# ── Панель еды и энергии ─────────────────────────────────────────────────
+	var fp = _panel(Color(0.08, 0.14, 0.08, 0.94))
+	top.add_child(fp)
+	var fv = VBoxContainer.new()
+	fv.add_theme_constant_override("separation", 4)
+	fp.add_child(fv)
+	fv.add_child(_lbl("ЕДА / ЭНЕРГИЯ", 11, Color(0.55, 0.90, 0.42)))
+	_food_lbl = _lbl("Еда: —", 12, Color.WHITE)
+	fv.add_child(_food_lbl)
+	fv.add_child(HSeparator.new())
+	_energy_lbl = _lbl("Энергия: —", 12, Color.WHITE)
+	fv.add_child(_energy_lbl)
+	_energy_bar = _bar(Color(0.25, 0.65, 1.0), 110.0)
+	_energy_bar.max_value = 1.0
+	fv.add_child(_energy_bar)
+	_night_lbl = _lbl("🌙 Ночь", 11, Color(0.55, 0.65, 1.0))
+	_night_lbl.visible = false
+	fv.add_child(_night_lbl)
+
 	# ── Бунт ─────────────────────────────────────────────────────────────────
 	_riot_panel          = _panel(Color(0.72, 0.02, 0.02, 0.95))
 	_riot_panel.position = Vector2(8.0, 130.0)
@@ -142,29 +173,16 @@ func _build_ui() -> void:
 	rv2.add_child(_lbl("Население взбунтовалось!", 13, Color.WHITE))
 
 	# ── Буря ─────────────────────────────────────────────────────────────────
-	_storm_lbl          = _lbl("Песчаная буря!", 14, Color(0.95, 0.82, 0.28))
+	_storm_lbl          = _lbl("⛈  Песчаная буря!", 14, Color(0.95, 0.82, 0.28))
 	_storm_lbl.position = Vector2(8.0, 200.0)
 	_storm_lbl.visible  = false
 	add_child(_storm_lbl)
 
-	# ── Выжившие ─────────────────────────────────────────────────────────────
-	_surv_panel          = _panel(Color(0.06, 0.22, 0.08, 0.96))
-	_surv_panel.position = Vector2(8.0, 236.0)
-	_surv_panel.visible  = false
-	add_child(_surv_panel)
-	var sv = VBoxContainer.new()
-	sv.add_theme_constant_override("separation", 5)
-	_surv_panel.add_child(sv)
-	_surv_lbl = _lbl("? выживших у ворот", 14, Color(0.40, 1.0, 0.40))
-	sv.add_child(_surv_lbl)
-	var sb = HBoxContainer.new()
-	sv.add_child(sb)
-	var acc = Button.new(); acc.text = "Принять"
-	acc.pressed.connect(_accept_survivors)
-	sb.add_child(acc)
-	var rej = Button.new(); rej.text = "Отказать"
-	rej.pressed.connect(_reject_survivors)
-	sb.add_child(rej)
+	# ── Угроза рейдеров ───────────────────────────────────────────────────────
+	_raider_lbl          = _lbl("⚔  Рейдеры: ? ходов", 14, Color(0.95, 0.40, 0.25))
+	_raider_lbl.position = Vector2(8.0, 228.0)
+	_raider_lbl.visible  = false
+	add_child(_raider_lbl)
 
 # ─── Сигналы ─────────────────────────────────────────────────────────────────
 
@@ -175,10 +193,15 @@ func _connect_signals() -> void:
 	EventBus.happiness_changed.connect(_on_mood_changed)
 	EventBus.riot_started.connect(func(): _riot_panel.visible = true)
 	EventBus.riot_ended.connect(func():   _riot_panel.visible = false)
-	EventBus.survivor_arrived.connect(_on_survivor_arrived)
 	EventBus.resources_changed.connect(_on_resources_changed)
 	EventBus.workers_changed.connect(func(_c, _n): _refresh_workers())
 	EventBus.act_changed.connect(_on_act_changed)
+	EventBus.food_changed.connect(_on_food_changed)
+	EventBus.hunger_changed.connect(func(v): _hunger_bar.value = v)
+	EventBus.energy_changed.connect(_on_energy_changed)
+	EventBus.night_changed.connect(func(n): _night_lbl.visible = n)
+	EventBus.raider_threat_changed.connect(_on_raider_threat)
+	EventBus.specialists_changed.connect(func(_e, _g): _refresh_workers())
 
 func _on_act_changed(act: int) -> void:
 	var names  = ["", "Акт I: Основание", "Акт II: Расширение", "Акт III: Финал"]
@@ -211,13 +234,28 @@ func _on_mood_changed(_hap: float, thirst: float, discontent: float) -> void:
 	_thirst_bar.value     = thirst
 	_discontent_bar.value = discontent
 
+func _on_food_changed(amount: float, net: float) -> void:
+	var sign = "+" if net >= 0.0 else ""
+	_food_lbl.text = "Еда: %.0f  (%s%.1f/д)" % [amount, sign, net]
+
+func _on_energy_changed(stored: float, _net: float, ratio: float) -> void:
+	var cap: float = GameState.energy_capacity
+	_energy_bar.value = ratio
+	if cap > 0.0:
+		_energy_lbl.text = "Энергия: %.0f/%.0f  (%d%%)" % [stored, cap, int(ratio * 100.0)]
+	else:
+		_energy_lbl.text = "Энергия: %.0f  (%d%%)" % [stored, int(ratio * 100.0)]
+
+func _on_raider_threat(turns: int) -> void:
+	if turns <= 0:
+		_raider_lbl.visible = false
+	else:
+		_raider_lbl.text    = "⚔  Рейдеры через: %d" % turns
+		_raider_lbl.visible = true
+
 func _on_resources_changed(sand: float, scrap: float, diamonds: float) -> void:
 	_res_lbl.text = "Пес: %.0f   Мет: %.0f   Алм: %.0f" % [sand, scrap, diamonds]
 	_refresh_workers()
-
-func _on_survivor_arrived(count: int) -> void:
-	_surv_lbl.text      = "%d выживших у ворот" % count
-	_surv_panel.visible = true
 
 # ─── Обработчики кнопок ──────────────────────────────────────────────────────
 
@@ -234,31 +272,6 @@ func _next_turn() -> void:
 	var tm = get_tree().get_first_node_in_group("turn_manager")
 	if tm:
 		tm.advance_turn()
-
-func _accept_survivors() -> void:
-	if GameState.survivors_waiting <= 0:
-		return
-	GameState.population += GameState.survivors_waiting
-	EventBus.population_changed.emit(GameState.population)
-	EventBus.game_event.emit({
-		"turn":        GameState.current_turn,
-		"title":       "Выжившие приняты",
-		"description": "%d человек вступили в поселение." % GameState.survivors_waiting,
-		"severity":    0,
-	})
-	GameState.survivors_waiting = 0
-	_surv_panel.visible = false
-
-func _reject_survivors() -> void:
-	EventBus.game_event.emit({
-		"turn":        GameState.current_turn,
-		"title":       "Ворота закрыты",
-		"description": "Вы отвергли выживших. Моральный дух поселенцев пошатнулся.",
-		"severity":    1,
-	})
-	GameState.discontent        = minf(100.0, GameState.discontent + 5.0)
-	GameState.survivors_waiting = 0
-	_surv_panel.visible         = false
 
 # ─── Вспомогательные функции ─────────────────────────────────────────────────
 

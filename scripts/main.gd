@@ -9,10 +9,10 @@ var _env_res: Environment
 # Сферические координаты: yaw = горизонтальный угол, pitch = вертикальный угол
 # position = target + (sin(yaw)*cos(pitch), sin(pitch), cos(yaw)*cos(pitch)) * CAM_DIST
 
-const CAM_DIST:      float = 32.0   # расстояние от цели до камеры
-const CAM_YAW_SPEED: float = 1.5    # рад/сек (клавиши Q/E)
-const CAM_MOUSE_SPEED: float = 0.004 # рад/пиксель (RMB-вращение)
-const CAM_PAN_SENSITIVITY: float = 2.0
+const CAM_DIST:        float = 32.0   # расстояние от цели до камеры
+const CAM_YAW_SPEED:   float = 1.5    # рад/сек (клавиши Q/E)
+const CAM_MOUSE_SPEED: float = 0.004  # рад/пиксель (RMB-вращение)
+const CAM_PAN_SPEED:   float = 8.0    # ед/сек (WASD-панорамирование)
 const CAM_TARGET_LIMIT: float = 20.0
 
 var _cam_yaw:    float   = 0.0
@@ -88,26 +88,45 @@ func _process(delta: float) -> void:
 		_cam_yaw += rot * CAM_YAW_SPEED * delta
 		_update_camera_position()
 
+	# WASD — панорамирование цели в плоскости XZ
+	# forward/right вычисляются из текущего yaw, чтобы движение было интуитивным
+	var fwd := Vector2(sin(_cam_yaw), cos(_cam_yaw))   # «вперёд» в XZ
+	var rgt := Vector2(fwd.y, -fwd.x)                  # «вправо» в XZ
+	var pan := Vector2.ZERO
+	if Input.is_key_pressed(KEY_W): pan += fwd
+	if Input.is_key_pressed(KEY_S): pan -= fwd
+	if Input.is_key_pressed(KEY_A): pan -= rgt
+	if Input.is_key_pressed(KEY_D): pan += rgt
+	if pan != Vector2.ZERO:
+		pan = pan.normalized() * CAM_PAN_SPEED * delta
+		_cam_target += Vector3(pan.x, 0.0, pan.y)
+		_cam_target.x = clampf(_cam_target.x, -CAM_TARGET_LIMIT, CAM_TARGET_LIMIT)
+		_cam_target.z = clampf(_cam_target.z, -CAM_TARGET_LIMIT, CAM_TARGET_LIMIT)
+		_update_camera_position()
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
-		match event.button_index:
-			MOUSE_BUTTON_RIGHT:
-				if event.pressed:
-					_drag_rmb   = true
-					_last_mouse = event.position
-					# Не блокируем событие — hex_map снимет выделение тайла
-				else:
-					_drag_rmb = false
-
-			MOUSE_BUTTON_WHEEL_UP:
-				_camera.size = maxf(8.0, _camera.size - 1.2)
-			MOUSE_BUTTON_WHEEL_DOWN:
-				_camera.size = minf(42.0, _camera.size + 1.2)
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				_drag_rmb   = true
+				_last_mouse = event.position
+				# Не блокируем событие — hex_map снимет выделение тайла
+			else:
+				_drag_rmb = false
 
 	elif event is InputEventMouseMotion:
 		if _drag_rmb:
 			_orbit_camera(event.relative)
 			get_viewport().set_input_as_handled()
+
+# Зум колесом мыши — только если GUI не перехватил событие (ScrollContainer внутри панелей)
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				_camera.size = maxf(8.0, _camera.size - 1.2)
+			MOUSE_BUTTON_WHEEL_DOWN:
+				_camera.size = minf(42.0, _camera.size + 1.2)
 
 # ─── Орбита (ПКМ перетаскивание) ─────────────────────────────────────────────
 
@@ -179,7 +198,7 @@ func _create_ui() -> void:
 	var bld = load("res://scripts/ui/building_panel.gd").new()
 	bld.name     = "BuildingPanel"
 	bld.position = Vector2(vp.x - 242.0, 156.0)
-	bld.size     = Vector2(234.0, 430.0)
+	bld.size     = Vector2(248.0, 500.0)
 	ui.add_child(bld)
 
 	var elog = load("res://scripts/ui/event_log.gd").new()
@@ -215,6 +234,12 @@ func _create_ui() -> void:
 	ui.add_child(mp)
 	mp.call_deferred("setup", get_meta("act_manager"))
 
+	var sp = load("res://scripts/ui/specialists_panel.gd").new()
+	sp.name     = "SpecialistsPanel"
+	sp.position = Vector2(8.0, 156.0)
+	sp.size     = Vector2(268.0, 380.0)
+	ui.add_child(sp)
+
 	# ── Модальный оверлей (выше всего) ───────────────────────────────────────
 	var modal_layer      = CanvasLayer.new()
 	modal_layer.layer    = 20
@@ -247,6 +272,10 @@ func _emit_initial_state() -> void:
 	EventBus.happiness_changed.emit(
 		GameState.happiness, GameState.thirst, GameState.discontent)
 	EventBus.resources_changed.emit(GameState.sand, GameState.scrap, GameState.diamonds)
+	EventBus.food_changed.emit(GameState.food, 0.0)
+	EventBus.hunger_changed.emit(GameState.hunger)
+	EventBus.energy_changed.emit(0.0, 0.0, 1.0)
+	EventBus.specialists_changed.emit(GameState.engineers, GameState.guards)
 	EventBus.game_event.emit({
 		"turn":        0,
 		"title":       "Поселение основано",

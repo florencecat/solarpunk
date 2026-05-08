@@ -6,6 +6,11 @@ const BUILDING_PURIFIER         = 1
 const BUILDING_CONDENSER        = 2
 const BUILDING_CARAVAN_STATION  = 3
 const BUILDING_MINE             = 4
+const BUILDING_FARM             = 5
+const BUILDING_SOLAR_PANEL      = 6
+const BUILDING_BATTERY          = 7
+const BUILDING_WALL             = 8
+const BUILDING_WATCHTOWER       = 9
 
 # ─── Building costs  {sand, scrap, diamonds} ──────────────────────────────────
 const BUILDING_COSTS = {
@@ -14,15 +19,32 @@ const BUILDING_COSTS = {
 	2: {"sand":  0, "scrap": 20, "diamonds": 1},  # CONDENSER
 	3: {"sand":  0, "scrap": 40, "diamonds": 0},  # CARAVAN_STATION
 	4: {"sand": 20, "scrap":  0, "diamonds": 0},  # MINE
+	5: {"sand":  0, "scrap": 25, "diamonds": 0},  # FARM
+	6: {"sand":  5, "scrap": 15, "diamonds": 1},  # SOLAR_PANEL
+	7: {"sand":  0, "scrap": 30, "diamonds": 0},  # BATTERY
+	8: {"sand": 30, "scrap": 10, "diamonds": 0},  # WALL
+	9: {"sand": 10, "scrap": 20, "diamonds": 0},  # WATCHTOWER
 }
 
-# ─── Resources ────────────────────────────────────────────────────────────────
+# ─── Water ────────────────────────────────────────────────────────────────────
 var water: float              = 200.0
 var dirty_water: float        = 0.0
 var water_production: float   = 0.0   # per turn
 var water_consumption: float  = 0.0   # per turn
 var water_net: float          = 0.0
 
+# ─── Food ─────────────────────────────────────────────────────────────────────
+var food: float               = 100.0
+var food_net: float           = 0.0
+var hunger: float             = 0.0     # 0–100, accumulates on shortage
+
+# ─── Energy ───────────────────────────────────────────────────────────────────
+var energy_stored: float      = 0.0
+var energy_capacity: float    = 0.0    # total battery storage available
+var energy_ratio: float       = 1.0    # 0–1 multiplier applied to powered buildings
+var is_night: bool            = false
+
+# ─── Resources ────────────────────────────────────────────────────────────────
 var sand:     float = 30.0
 var scrap:    float = 0.0
 var diamonds: float = 0.0
@@ -35,6 +57,13 @@ var discontent: float   = 0.0     # 0–100, triggers riots
 
 var is_rioting: bool          = false
 var riot_turns_remaining: int = 0
+
+# ─── Specialists ──────────────────────────────────────────────────────────────
+var engineers: int            = 0
+var guards: int               = 0
+
+# ─── Raiders ──────────────────────────────────────────────────────────────────
+var raider_threat_turns: int  = 0   # 0 = no threat, >0 = countdown turns
 
 # ─── Turn ─────────────────────────────────────────────────────────────────────
 var current_turn: int         = 0
@@ -64,7 +93,7 @@ func get_assigned_workers() -> int:
 	return total
 
 func get_available_workers() -> int:
-	return maxi(0, population - get_assigned_workers())
+	return maxi(0, population - engineers - guards - get_assigned_workers())
 
 # ─── Деградация зданий ───────────────────────────────────────────────────────
 var building_durability: Dictionary = {}  # Vector2i → float (0–100)

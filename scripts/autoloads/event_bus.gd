@@ -46,9 +46,11 @@ signal assign_workers_request(coords: Vector2i, target: int)
 @warning_ignore("unused_signal")
 signal game_over(reason: String, score: int)
 @warning_ignore("unused_signal")
-signal choice_event_pending(event: Dictionary)  # {title, desc, choice_a, choice_b}
+signal choice_event_pending(event: Dictionary)   # {title, desc, choice_a, choice_b, [choice_c], [severity], [icon]}
 @warning_ignore("unused_signal")
-signal choice_resolved(choice: int)             # 0 = A (первый), 1 = B (второй)
+signal choice_resolved(choice: int)              # 0 = A, 1 = B, 2 = C
+@warning_ignore("unused_signal")
+signal notification_event(event: Dictionary)     # {title, desc, severity, [icon]} — info-only, OK button
 
 @warning_ignore("unused_signal")
 signal act_changed(act: int)                    # 1, 2, 3
@@ -62,3 +64,19 @@ signal megaproject_started(project_id: int)
 signal megaproject_progress(turns_left: int, turns_total: int)
 @warning_ignore("unused_signal")
 signal victory(project_id: int, victory_text: String)
+
+@warning_ignore("unused_signal")
+signal food_changed(amount: float, net: float)
+@warning_ignore("unused_signal")
+signal hunger_changed(value: float)
+
+@warning_ignore("unused_signal")
+signal energy_changed(stored: float, net: float, ratio: float)
+@warning_ignore("unused_signal")
+signal night_changed(is_night: bool)
+
+@warning_ignore("unused_signal")
+signal raider_threat_changed(turns: int)   # 0 = cleared / no threat
+
+@warning_ignore("unused_signal")
+signal specialists_changed(engineers: int, guards: int)

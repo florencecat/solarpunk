@@ -2,7 +2,7 @@ class_name HexMap
 extends Node3D
 
 const HEX_SIZE:   float = 1.10
-const MAP_RADIUS: int   = 8
+const MAP_RADIUS: int   = 12
 
 const WATER_RESERVE_MIN: float = 800.0
 const WATER_RESERVE_MAX: float = 2000.0
@@ -12,7 +12,7 @@ const WATER_RESERVE_MAX: float = 2000.0
 const TILE_HEIGHT_RANGE: Dictionary = {
 	0: [0.05, 0.40],   # SAND
 	1: [0.55, 1.35],   # ROCK
-	2: [-0.05, 0.08],  # OASIS
+	2: [0.05, 0.10],   # OASIS
 	3: [0.00, 0.15],   # WATER_SOURCE
 	4: [0.02, 0.18],   # DRY_SOURCE
 	5: [0.45, 1.10],   # MINE
@@ -67,8 +67,8 @@ func _generate_map() -> void:
 		var h    = _tile_height(coords, t, rng)
 		var tile = HexTile.new()
 		var px   = HexGrid.hex_to_pixel(coords.x, coords.y, HEX_SIZE)
-		tile.position = Vector3(px.x, h, px.y)
-		tile.setup(coords.x, coords.y, HEX_SIZE, t)
+		tile.position = Vector3(px.x, 0.0, px.y)
+		tile.setup(coords.x, coords.y, HEX_SIZE, t, h)
 		add_child(tile)
 		tiles[coords]               = tile
 		GameState.hex_tiles[coords] = tile
@@ -172,7 +172,7 @@ func _update_overlay() -> void:
 
 	var tile: HexTile = tiles[_hovered]
 	var px            = HexGrid.hex_to_pixel(_hovered.x, _hovered.y, HEX_SIZE)
-	var tile_h: float = tile.position.y   # мировая высота тайла
+	var tile_h: float = tile.tile_height   # высота верхней грани
 
 	if GameState.selected_building_type >= 0:
 		var ok = tile.can_build()

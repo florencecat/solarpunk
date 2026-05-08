@@ -3,6 +3,8 @@ extends Node
 
 const THIRST_GAIN:   float = 8.0    # за ход при нехватке воды
 const THIRST_LOSS:   float = 10.0   # за ход при достаточном запасе
+const HUNGER_GAIN:   float = 10.0   # за ход при нехватке еды
+const HUNGER_LOSS:   float = 12.0   # за ход при достаточном запасе еды
 const DISCORD_RATE:  float = 0.12   # множитель жажды → недовольство
 const DISCORD_COOL:  float = 2.5    # снижение недовольства/ход при комфорте
 const RIOT_THRESH:   float = 80.0   # порог бунта
@@ -12,10 +14,13 @@ const GROWTH_INTERVAL:   int   = 5     # проверка прироста ка�
 const GROWTH_HAPPI_MIN:  float = 60.0  # минимальная мораль для прироста
 const GROWTH_WATER_MIN:  float = 50.0  # минимальный запас воды для прироста
 const DEATH_THIRST_MIN:  float = 65.0  # жажда выше этого → начинают умирать
+const DEATH_HUNGER_MIN:  float = 70.0  # голод выше этого → начинают умирать
 
 func process_turn() -> void:
 	_update_thirst()
 	_check_thirst_deaths()
+	_update_hunger()
+	_check_hunger_deaths()
 	_update_discontent()
 	_check_riot()
 	_check_growth()
@@ -24,6 +29,7 @@ func process_turn() -> void:
 	GameState.happiness = clampf(100.0 - GameState.discontent, 0.0, 100.0)
 	EventBus.happiness_changed.emit(
 		GameState.happiness, GameState.thirst, GameState.discontent)
+	EventBus.hunger_changed.emit(GameState.hunger)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -33,6 +39,22 @@ func _update_thirst() -> void:
 		GameState.thirst = minf(100.0, GameState.thirst + THIRST_GAIN * sev)
 	else:
 		GameState.thirst = maxf(0.0, GameState.thirst - THIRST_LOSS)
+
+func _update_hunger() -> void:
+	if GameState.food <= 0.0 or GameState.food_net < 0.0:
+		GameState.hunger = minf(100.0, GameState.hunger + HUNGER_GAIN)
+	else:
+		GameState.hunger = maxf(0.0, GameState.hunger - HUNGER_LOSS)
+
+func _check_hunger_deaths() -> void:
+	if GameState.hunger < DEATH_HUNGER_MIN:
+		return
+	var death_rate = (GameState.hunger - DEATH_HUNGER_MIN) / (100.0 - DEATH_HUNGER_MIN) * 0.03
+	var deaths     = maxi(1, int(float(GameState.population) * death_rate))
+	GameState.population = maxi(0, GameState.population - deaths)
+	EventBus.population_changed.emit(GameState.population)
+	_log("Гибель от голода",
+		"%d жителей умерли от истощения. Постройте фермы!" % deaths, 3)
 
 func _check_thirst_deaths() -> void:
 	if GameState.thirst < DEATH_THIRST_MIN:
@@ -58,8 +80,14 @@ func _update_discontent() -> void:
 	if GameState.thirst > 20.0:
 		var gain = (GameState.thirst - 20.0) * DISCORD_RATE * 0.1
 		GameState.discontent = minf(100.0, GameState.discontent + gain)
-	else:
-		# Восстановление — замедлено при Водных кастах, ускорено технологией
+
+	# Голод → недовольство
+	if GameState.hunger > 25.0:
+		var hunger_gain = (GameState.hunger - 25.0) * DISCORD_RATE * 0.08
+		GameState.discontent = minf(100.0, GameState.discontent + hunger_gain)
+
+	# Восстановление при комфорте (нет жажды и нет голода)
+	if GameState.thirst <= 20.0 and GameState.hunger <= 25.0:
 		var cool: float = DISCORD_COOL
 		if GameState.active_laws.get(LawsManager.LAW_WATER_CASTES, false):
 			cool *= 0.5
@@ -109,6 +137,8 @@ func _check_growth() -> void:
 	GameState.growth_timer = 0
 	if GameState.happiness < GROWTH_HAPPI_MIN or GameState.water < GROWTH_WATER_MIN:
 		return
+	if GameState.hunger > 20.0:
+		return  # голодные жители не привлекают новых поселенцев
 	var newcomers = maxi(1, int(float(GameState.population) * 0.025))
 	GameState.population += newcomers
 	EventBus.population_changed.emit(GameState.population)

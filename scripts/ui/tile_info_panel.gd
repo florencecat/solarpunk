@@ -114,8 +114,9 @@ func _refresh() -> void:
 			box.visible  = false
 			box.disabled = true
 
-	_avail_lbl.text = "(свободно: %d)" % avail
-	_prod_lbl.text  = _prod_text(tile, workers)
+	_avail_lbl.text    = "(свободно: %d)" % avail
+	_avail_lbl.visible = max_w > 0
+	_prod_lbl.text     = _prod_text(tile, workers)
 	_risk_lbl.text  = _risk_text(tile)
 	_risk_lbl.visible = _risk_lbl.text != ""
 
@@ -177,19 +178,45 @@ func _bld_name(b: int) -> String:
 		GameState.BUILDING_CONDENSER:       return "Конденсатор"
 		GameState.BUILDING_CARAVAN_STATION: return "Торговый пост"
 		GameState.BUILDING_MINE:            return "Шахта"
+		GameState.BUILDING_FARM:            return "Ферма"
+		GameState.BUILDING_SOLAR_PANEL:     return "Солнечная панель"
+		GameState.BUILDING_BATTERY:         return "Аккумулятор"
+		GameState.BUILDING_WALL:            return "Стена"
+		GameState.BUILDING_WATCHTOWER:      return "Сторожевая башня"
 		_:                                  return "?"
 
 func _prod_text(tile: HexTile, workers: int) -> String:
+	# Пассивные здания (без рабочих)
+	match tile.building:
+		GameState.BUILDING_BATTERY:
+			return "Хранит до 50 ед. энергии (пассивно)"
+		GameState.BUILDING_WALL:
+			return "+3 к обороне против рейдеров"
+
 	if workers <= 0:
 		return ("Нет рабочих — постройка простаивает"
 				if tile.building >= 0 else "Нет рабочих — добычи нет")
-	if tile.building == GameState.BUILDING_MINE or tile.tile_type == HexTile.TILE_MINE:
+
+	match tile.building:
+		GameState.BUILDING_MINE:
+			return "+%d–%d мет,  +%.0f–%.0f пес / день" % [
+				workers, workers * 4, workers * 0.5, workers * 2.0]
+		GameState.BUILDING_FARM:
+			return "+%.1f еды / день  (−%.1f воды)" % [
+				workers * 3.5, workers * 0.8]
+		GameState.BUILDING_SOLAR_PANEL:
+			if GameState.is_night:
+				return "Ночь — солнечная панель не работает"
+			return "+%.0f энергии / день" % float(workers * 8)
+
+	if tile.tile_type == HexTile.TILE_MINE and tile.building < 0:
 		return "+%d–%d мет,  +%.0f–%.0f пес / день" % [
 			workers, workers * 4, workers * 0.5, workers * 2.0]
+
 	if tile.building >= 0:
 		var dur_pct := ""
 		if GameState.building_durability.has(_coords):
-			dur_pct = "  (eff %.0f%%)" % GameState.building_durability[_coords]
+			dur_pct = "  (эфф. %.0f%%)" % GameState.building_durability[_coords]
 		return "Постройка активна%s" % dur_pct
 	return "+%d–%d пес / день" % [workers, workers * 4]
 

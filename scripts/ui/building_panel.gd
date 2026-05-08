@@ -22,10 +22,29 @@ func _build_content(vbox: VBoxContainer) -> void:
 	vbox.add_child(hint)
 	vbox.add_child(HSeparator.new())
 
-	for b: int in [GameState.BUILDING_PUMP, GameState.BUILDING_PURIFIER,
-				   GameState.BUILDING_CONDENSER, GameState.BUILDING_CARAVAN_STATION,
-				   GameState.BUILDING_MINE]:
-		vbox.add_child(_bld_entry(b))
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical    = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	var sv = VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 4)
+	sv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(sv)
+
+	for b: int in [
+		GameState.BUILDING_PUMP,
+		GameState.BUILDING_PURIFIER,
+		GameState.BUILDING_CONDENSER,
+		GameState.BUILDING_CARAVAN_STATION,
+		GameState.BUILDING_MINE,
+		GameState.BUILDING_FARM,
+		GameState.BUILDING_SOLAR_PANEL,
+		GameState.BUILDING_BATTERY,
+		GameState.BUILDING_WALL,
+		GameState.BUILDING_WATCHTOWER,
+	]:
+		sv.add_child(_bld_entry(b))
 
 func _bld_entry(b: int) -> Control:
 	var info  = _info(b)
@@ -144,5 +163,35 @@ func _info(b: int) -> Dictionary:
 					"prod":  "1–4 мет + 0.5–2 пес/раб",
 					"cost":  "20 пес",
 					"color": Color(0.72, 0.50, 0.22)}
+		GameState.BUILDING_FARM:
+			return {"name":  "Ферма",
+					"desc":  "Гидропоника. Даёт еду, потребляет воду и энергию.",
+					"prod":  "+3.5 еды/раб · −0.8 воды/раб",
+					"cost":  "25 мет",
+					"color": Color(0.28, 0.75, 0.22)}
+		GameState.BUILDING_SOLAR_PANEL:
+			return {"name":  "Солнечная панель",
+					"desc":  "Вырабатывает энергию днём. Не работает ночью/в бурю.",
+					"prod":  "+8 энергии/раб (только день)",
+					"cost":  "5 пес + 15 мет + 1 алм",
+					"color": Color(0.20, 0.45, 0.95)}
+		GameState.BUILDING_BATTERY:
+			return {"name":  "Аккумулятор",
+					"desc":  "Хранит 50 ед. энергии. Рабочие не нужны.",
+					"prod":  "+50 ёмкости хранения",
+					"cost":  "30 мет",
+					"color": Color(0.20, 0.80, 0.40)}
+		GameState.BUILDING_WALL:
+			return {"name":  "Стена",
+					"desc":  "Защищает от рейдеров. +3 силы обороны за стену.",
+					"prod":  "+3 оборона",
+					"cost":  "30 пес + 10 мет",
+					"color": Color(0.65, 0.55, 0.35)}
+		GameState.BUILDING_WATCHTOWER:
+			return {"name":  "Сторожевая башня",
+					"desc":  "Увеличивает время предупреждения о рейдерах на 3 хода.",
+					"prod":  "+3 хода до рейда",
+					"cost":  "10 пес + 20 мет",
+					"color": Color(0.78, 0.40, 0.18)}
 		_:
 			return {"name": "?", "desc": "", "prod": "", "cost": "", "color": Color.WHITE}
