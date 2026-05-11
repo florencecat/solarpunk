@@ -23,6 +23,8 @@ const C_WATER    := Color(0.353, 0.643, 0.812)
 # ─────────────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	return
+	
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	resized.connect(queue_redraw)
